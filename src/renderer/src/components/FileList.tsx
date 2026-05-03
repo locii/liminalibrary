@@ -62,8 +62,7 @@ export function FileList(): JSX.Element {
           <div
             key={file.id}
             draggable
-            onDragStart={(e) => {
-              e.preventDefault()
+            onDragStart={() => {
               window.electronAPI.startDrag(file.filePath)
             }}
             onClick={() => selectFile(file.id)}

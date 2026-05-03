@@ -135,6 +135,7 @@ app.whenReady().then(() => {
 
   ipcMain.on('library:startDrag', (event, filePath: string) => {
     event.sender.startDrag({ file: filePath, icon: createDragIcon() })
+    event.returnValue = null  // required for sendSync
   })
 
   createWindow()

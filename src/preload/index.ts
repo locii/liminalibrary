@@ -15,7 +15,7 @@ const api: LibraryAPI = {
   getAudioServerPort: () => ipcRenderer.invoke('audio:getServerPort'),
 
   showInFolder: (filePath) => ipcRenderer.invoke('shell:showInFolder', filePath),
-  startDrag: (filePath) => ipcRenderer.send('library:startDrag', filePath),
+  startDrag: (filePath) => ipcRenderer.sendSync('library:startDrag', filePath),
   setWindowTitle: (title) => ipcRenderer.send('window:setTitle', title),
 }
 
