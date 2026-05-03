@@ -63,10 +63,8 @@ export function FileList(): JSX.Element {
             key={file.id}
             draggable
             onDragStart={(e) => {
-              // Show the file name as the drag image text, then kick off native drag
-              e.dataTransfer.setData('text/plain', file.filePath)
-              // Use a tiny timeout so the browser drag image renders before we take over
-              setTimeout(() => window.electronAPI.startDrag(file.filePath), 0)
+              e.preventDefault()
+              window.electronAPI.startDrag(file.filePath)
             }}
             onClick={() => selectFile(file.id)}
             onDoubleClick={() => window.electronAPI.showInFolder(file.filePath)}

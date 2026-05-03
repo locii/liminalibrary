@@ -38,7 +38,7 @@ export default function App(): JSX.Element {
 
   const handleResizerMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
-    dragStateRef.current = { dragging: true, startX: e.clientX, startWidth: folderPanelWidth }
+    dragStateRef.current = { dragging: true, startX: e.clientX, startWidth: propsPanelWidth }
     const onMove = (ev: MouseEvent): void => {
       if (!dragStateRef.current.dragging) return
       const delta = ev.clientX - dragStateRef.current.startX
@@ -51,7 +51,7 @@ export default function App(): JSX.Element {
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
-  }, [folderPanelWidth])
+  }, [propsPanelWidth])
 
   const handleAddFolder = useCallback(async () => {
     const folderPath = await window.electronAPI.pickFolder()
