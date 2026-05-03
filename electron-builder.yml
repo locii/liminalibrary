@@ -1,0 +1,50 @@
+appId: com.limina.library
+productName: Limina Library
+copyright: Copyright © 2025 Limina Library
+
+directories:
+  buildResources: resources
+  output: dist
+
+files:
+  - out/**/*
+  - node_modules/**/*
+  - '!node_modules/**/README*'
+  - '!node_modules/**/*.md'
+  - '!node_modules/**/*.map'
+
+asarUnpack:
+  - node_modules/ffmpeg-static/**
+  - node_modules/music-metadata/**
+
+mac:
+  category: public.app-category.music
+  icon: resources/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  darkModeSupport: true
+
+win:
+  icon: resources/icon.png
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+dmg:
+  title: Limina Library
+  background: null
+  contents:
+    - x: 130
+      y: 220
+      type: file
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
