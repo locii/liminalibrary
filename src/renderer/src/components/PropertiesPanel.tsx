@@ -44,7 +44,7 @@ export function PropertiesPanel(): JSX.Element {
   }
 
   return (
-    <div className="flex flex-col w-64 shrink-0 border-l border-surface-border bg-surface-panel overflow-y-auto">
+    <div className="flex flex-col w-full h-full border-l border-surface-border bg-surface-panel overflow-y-auto">
 
       {/* Waveform + playback — key forces remount (and audio stop) on file change */}
       <WaveformPreview

@@ -17,7 +17,7 @@ export default function App(): JSX.Element {
   const setScanning = useLibraryStore((s) => s.setScanning)
   const toCatalogue = useLibraryStore((s) => s.toCatalogue)
 
-  const [folderPanelWidth, setFolderPanelWidth] = useState(PANEL_DEFAULT)
+  const [propsPanelWidth, setPropsPanelWidth] = useState(PANEL_DEFAULT)
   const dragStateRef = useRef<{ dragging: boolean; startX: number; startWidth: number }>({
     dragging: false, startX: 0, startWidth: PANEL_DEFAULT,
   })
@@ -42,7 +42,7 @@ export default function App(): JSX.Element {
     const onMove = (ev: MouseEvent): void => {
       if (!dragStateRef.current.dragging) return
       const delta = ev.clientX - dragStateRef.current.startX
-      setFolderPanelWidth(Math.min(PANEL_MAX, Math.max(PANEL_MIN, dragStateRef.current.startWidth + delta)))
+      setPropsPanelWidth(Math.min(PANEL_MAX, Math.max(PANEL_MIN, dragStateRef.current.startWidth - delta)))
     }
     const onUp = (): void => {
       dragStateRef.current.dragging = false
@@ -98,18 +98,21 @@ export default function App(): JSX.Element {
 
       {hasContent ? (
         <div className="flex flex-1 min-h-0">
-          <div style={{ width: folderPanelWidth }} className="shrink-0">
-            <FolderPanel onAddFolder={handleAddFolder} />
-          </div>
-
-          {/* Resize handle */}
-          <div
-            onMouseDown={handleResizerMouseDown}
-            className="w-1 shrink-0 bg-surface-border hover:bg-accent/40 cursor-col-resize transition-colors active:bg-accent/60"
-          />
-
+          <FolderPanel onAddFolder={handleAddFolder} />
           <FileList />
-          {selectedFileId && <PropertiesPanel />}
+
+          {selectedFileId && (
+            <>
+              {/* Resize handle */}
+              <div
+                onMouseDown={handleResizerMouseDown}
+                className="w-1 shrink-0 bg-surface-border hover:bg-accent/40 cursor-col-resize transition-colors active:bg-accent/60"
+              />
+              <div style={{ width: propsPanelWidth }} className="shrink-0">
+                <PropertiesPanel />
+              </div>
+            </>
+          )}
         </div>
       ) : (
         <WelcomeScreen onAddFolder={handleAddFolder} />

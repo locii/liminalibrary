@@ -19,7 +19,7 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
   const totalFiles = files.length
 
   return (
-    <div className="flex flex-col w-full h-full border-r border-surface-border bg-surface-panel">
+    <div className="flex flex-col w-52 shrink-0 border-r border-surface-border bg-surface-panel">
       {/* All files */}
       <button
         onClick={() => selectFolder(null)}
