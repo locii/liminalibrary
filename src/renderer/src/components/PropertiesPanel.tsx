@@ -1,6 +1,7 @@
 import { useLibraryStore } from '../store/libraryStore'
 import { BREATHWORK_PHASES } from '../types'
 import type { BreathworkPhase } from '../types'
+import { WaveformPreview } from './WaveformPreview'
 
 function formatDuration(seconds: number): string {
   if (!seconds) return '—'
@@ -44,6 +45,15 @@ export function PropertiesPanel(): JSX.Element {
 
   return (
     <div className="flex flex-col w-64 shrink-0 border-l border-surface-border bg-surface-panel overflow-y-auto">
+
+      {/* Waveform + playback — key forces remount (and audio stop) on file change */}
+      <WaveformPreview
+        key={file.id}
+        fileId={file.id}
+        filePath={file.filePath}
+        duration={file.duration}
+        peaks={file.peaks}
+      />
 
       {/* File info */}
       <div className="p-3 border-b border-surface-border flex flex-col gap-2">
