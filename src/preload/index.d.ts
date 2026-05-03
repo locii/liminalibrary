@@ -18,6 +18,7 @@ export interface LibraryAPI {
 
   // Shell
   showInFolder: (filePath: string) => Promise<void>
+  startDrag: (filePath: string) => void
   setWindowTitle: (title: string) => void
 }
 

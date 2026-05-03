@@ -1,16 +1,26 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useRef, useState } from 'react'
 import { useLibraryStore } from './store/libraryStore'
 import { FolderPanel } from './components/FolderPanel'
 import { FileList } from './components/FileList'
 import { PropertiesPanel } from './components/PropertiesPanel'
 
+const PANEL_MIN = 140
+const PANEL_MAX = 360
+const PANEL_DEFAULT = 208
+
 export default function App(): JSX.Element {
   const watchedFolders = useLibraryStore((s) => s.watchedFolders)
+  const selectedFileId = useLibraryStore((s) => s.selectedFileId)
   const loadCatalogue = useLibraryStore((s) => s.loadCatalogue)
   const addWatchedFolder = useLibraryStore((s) => s.addWatchedFolder)
   const addFiles = useLibraryStore((s) => s.addFiles)
   const setScanning = useLibraryStore((s) => s.setScanning)
   const toCatalogue = useLibraryStore((s) => s.toCatalogue)
+
+  const [folderPanelWidth, setFolderPanelWidth] = useState(PANEL_DEFAULT)
+  const dragStateRef = useRef<{ dragging: boolean; startX: number; startWidth: number }>({
+    dragging: false, startX: 0, startWidth: PANEL_DEFAULT,
+  })
 
   // Load catalogue on mount
   useEffect(() => {
@@ -25,6 +35,23 @@ export default function App(): JSX.Element {
       window.electronAPI.saveCatalogue(useLibraryStore.getState().toCatalogue())
     })
   }, [])
+
+  const handleResizerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    dragStateRef.current = { dragging: true, startX: e.clientX, startWidth: folderPanelWidth }
+    const onMove = (ev: MouseEvent): void => {
+      if (!dragStateRef.current.dragging) return
+      const delta = ev.clientX - dragStateRef.current.startX
+      setFolderPanelWidth(Math.min(PANEL_MAX, Math.max(PANEL_MIN, dragStateRef.current.startWidth + delta)))
+    }
+    const onUp = (): void => {
+      dragStateRef.current.dragging = false
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [folderPanelWidth])
 
   const handleAddFolder = useCallback(async () => {
     const folderPath = await window.electronAPI.pickFolder()
@@ -71,9 +98,18 @@ export default function App(): JSX.Element {
 
       {hasContent ? (
         <div className="flex flex-1 min-h-0">
-          <FolderPanel onAddFolder={handleAddFolder} />
+          <div style={{ width: folderPanelWidth }} className="shrink-0">
+            <FolderPanel onAddFolder={handleAddFolder} />
+          </div>
+
+          {/* Resize handle */}
+          <div
+            onMouseDown={handleResizerMouseDown}
+            className="w-1 shrink-0 bg-surface-border hover:bg-accent/40 cursor-col-resize transition-colors active:bg-accent/60"
+          />
+
           <FileList />
-          <PropertiesPanel />
+          {selectedFileId && <PropertiesPanel />}
         </div>
       ) : (
         <WelcomeScreen onAddFolder={handleAddFolder} />

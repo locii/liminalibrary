@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, nativeImage } from 'electron'
 import { join } from 'path'
 import { createReadStream } from 'fs'
 import { promises as fs } from 'fs'
@@ -16,6 +16,29 @@ function audioMime(filePath: string): string {
     '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.flac': 'audio/flac',
     '.aiff': 'audio/aiff', '.aif': 'audio/aiff', '.m4a': 'audio/mp4',
   }) as Record<string, string>)[ext] ?? 'audio/mpeg'
+}
+
+function createDragIcon(): Electron.NativeImage {
+  const size = 32
+  const buf = Buffer.alloc(size * size * 4)
+  const bars = [4, 7, 10, 13, 16, 19, 22, 25, 28]
+  const heights = [10, 18, 24, 20, 28, 22, 16, 12, 8]
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4
+      buf[i] = 26; buf[i + 1] = 26; buf[i + 2] = 26; buf[i + 3] = 220
+      for (let b = 0; b < bars.length; b++) {
+        if (x === bars[b] || x === bars[b] + 1) {
+          const top = Math.round(16 - heights[b] / 2)
+          const bot = Math.round(16 + heights[b] / 2)
+          if (y >= top && y <= bot) {
+            buf[i] = 99; buf[i + 1] = 102; buf[i + 2] = 241; buf[i + 3] = 255
+          }
+        }
+      }
+    }
+  }
+  return nativeImage.createFromBuffer(buf, { width: size, height: size })
 }
 
 let audioServerPort = 0
@@ -108,6 +131,10 @@ app.whenReady().then(() => {
 
   ipcMain.handle('shell:showInFolder', (_, filePath: string) => {
     shell.showItemInFolder(filePath)
+  })
+
+  ipcMain.on('library:startDrag', (event, filePath: string) => {
+    event.sender.startDrag({ file: filePath, icon: createDragIcon() })
   })
 
   createWindow()

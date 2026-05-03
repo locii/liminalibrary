@@ -59,17 +59,30 @@ export function FileList(): JSX.Element {
       {/* File rows */}
       <div className="flex-1 overflow-y-auto">
         {files.map((file) => (
-          <button
+          <div
             key={file.id}
+            draggable
+            onDragStart={(e) => {
+              // Show the file name as the drag image text, then kick off native drag
+              e.dataTransfer.setData('text/plain', file.filePath)
+              // Use a tiny timeout so the browser drag image renders before we take over
+              setTimeout(() => window.electronAPI.startDrag(file.filePath), 0)
+            }}
             onClick={() => selectFile(file.id)}
             onDoubleClick={() => window.electronAPI.showInFolder(file.filePath)}
-            className={`w-full flex items-center px-3 py-1.5 gap-3 text-left transition-colors border-b border-surface-border/50 ${
+            className={`flex items-center px-3 py-1.5 gap-3 text-left transition-colors border-b border-surface-border/50 cursor-grab active:cursor-grabbing select-none ${
               selectedFileId === file.id
                 ? 'bg-accent/15 text-gray-200'
                 : 'hover:bg-surface-hover text-gray-400'
             }`}
-            title={file.filePath}
+            title={`${file.filePath}\nDrag to Limina Studio`}
           >
+            {/* Drag handle indicator */}
+            <svg className="w-2.5 h-2.5 shrink-0 text-gray-700 opacity-0 group-hover:opacity-100" viewBox="0 0 8 14" fill="currentColor">
+              <circle cx="2" cy="2" r="1.2" /><circle cx="6" cy="2" r="1.2" />
+              <circle cx="2" cy="7" r="1.2" /><circle cx="6" cy="7" r="1.2" />
+              <circle cx="2" cy="12" r="1.2" /><circle cx="6" cy="12" r="1.2" />
+            </svg>
             <span className="flex-1 text-[11px] truncate min-w-0">{file.fileName}</span>
             <span className="w-12 text-[11px] text-right shrink-0 tabular-nums">
               {formatDuration(file.duration)}
@@ -80,7 +93,7 @@ export function FileList(): JSX.Element {
             <span className="w-14 text-[11px] text-right shrink-0 tabular-nums text-gray-600">
               {formatSize(file.fileSize)}
             </span>
-          </button>
+          </div>
         ))}
       </div>
 
