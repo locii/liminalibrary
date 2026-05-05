@@ -1,12 +1,49 @@
-export type BreathworkPhase = 'opening' | 'buildup' | 'peak' | 'descent' | 'return'
+export type BreathworkPhase =
+  | 'first-hour'
+  | 'second-hour'
+  | 'third-hour'
+  | 'second-hour-transition'
+  | 'third-hour-transition'
+  | 'breakthrough'
+  | 'jumpstart'
+  | 'call-to-adventure'
+  | 'breakthrough-tension'
+  | 'breakthrough-release'
 
 export const BREATHWORK_PHASES: { value: BreathworkPhase; label: string }[] = [
-  { value: 'opening',  label: 'Opening'  },
-  { value: 'buildup',  label: 'Build-up' },
-  { value: 'peak',     label: 'Peak'     },
-  { value: 'descent',  label: 'Descent'  },
-  { value: 'return',   label: 'Return'   },
+  { value: 'first-hour',               label: 'First Hour'               },
+  { value: 'second-hour',              label: 'Second Hour'              },
+  { value: 'third-hour',               label: 'Third Hour'               },
+  { value: 'second-hour-transition',   label: 'Second Hour Transition'   },
+  { value: 'third-hour-transition',    label: 'Third Hour Transition'    },
+  { value: 'breakthrough',             label: 'Breakthrough'             },
+  { value: 'jumpstart',                label: 'Jumpstart'                },
+  { value: 'call-to-adventure',        label: 'Call to Adventure'        },
+  { value: 'breakthrough-tension',     label: 'Breakthrough Tension'     },
+  { value: 'breakthrough-release',     label: 'Breakthrough Release'     },
 ]
+
+// Colors follow journey arc: green → amber → orange → red → blue → pale blue
+export const PHASE_COLORS: Record<BreathworkPhase, string> = {
+  'call-to-adventure':       '#7ac47a',
+  'jumpstart':               '#9ec86e',
+  'first-hour':              '#b8c46e',
+  'second-hour-transition':  '#c8b46e',
+  'second-hour':             '#c99a4e',
+  'breakthrough-tension':    '#c96a3e',
+  'breakthrough':            '#c43838',
+  'breakthrough-release':    '#5b8fd4',
+  'third-hour-transition':   '#7aaed4',
+  'third-hour':              '#9ec8e0',
+}
+
+export function phaseColorForTag(tagName: string): string | null {
+  const lower = tagName.toLowerCase()
+  const phase = BREATHWORK_PHASES.find(
+    (p) => p.label.toLowerCase() === lower || p.value === lower
+  )
+  return phase ? PHASE_COLORS[phase.value] : null
+}
 
 export interface WatchedFolder {
   id: string
@@ -20,6 +57,13 @@ export interface LibraryFile {
   id: string           // stable hash of filePath
   filePath: string
   fileName: string
+  artist: string
+  album: string
+  /** Inferred from watched-folder path …/Artist/Album/ ; shown italic until Apply */
+  artistPathGuess: string
+  albumPathGuess: string
+  /** Whether folder guesses were written into artist/album (confirmed in track panel). */
+  appliedPathGuess: boolean
   folderPath: string
   duration: number     // seconds
   sampleRate: number
@@ -32,12 +76,67 @@ export interface LibraryFile {
   breathworkPhase: BreathworkPhase | null
   dateAdded: string    // ISO
   peaks: number[]      // cached waveform peaks
+  trackTitle: string      // MFB track title once applied; empty until then
+  mfbTrackId: number | null  // MFB track ID once applied; null until then
+  mfbIndexed: boolean  // whether this track has been searched against MFB
+  mfbApplied: boolean  // whether an MFB match was applied to this track
+  audioFeatures: MfbAudioFeatures | null
+}
+
+export interface MfbTag { id: number; name: string; slug: { en: string } }
+
+export interface MfbAudioFeatures {
+  intensity: number
+  activation_intensity: number
+  affective_intensity: number
+  tempo: number
+  tempo_label: string
+  energy: number
+  energy_label: string
+  valence: number
+  valence_label: string
+  danceability: number
+  danceability_label: string
+  spaciousness: number
+  tension: number
+}
+
+export interface MfbMatch {
+  id: number
+  title: string
+  slug?: string
+  artists: { id: number; name: string }[]
+  album: { id: number; title: string; image_url: string }
+  audio_features?: MfbAudioFeatures
+  tags: Record<string, MfbTag[]>
+  description: string
+}
+
+export function mfbTrackUrl(id: number, slugOrTitle: string): string {
+  const slug = `${id}-${slugOrTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`
+  return `https://musicforbreathwork.com/tracks/${slug}`
+}
+
+export interface MfbPlaylistTrack {
+  id: number
+  title: string
+  artist: string
+}
+
+export interface MfbPlaylist {
+  id: number
+  title: string
+  trackIds: number[]
+  tracks: MfbPlaylistTrack[]
 }
 
 export interface Catalogue {
   version: string
   watchedFolders: WatchedFolder[]
   files: LibraryFile[]
+  removedFiles?: LibraryFile[]
+  /** Maps MFB playlist ID → saved .limina file path */
+  playlistSessions?: Record<number, string>
 }
 
 export interface ScanResult {

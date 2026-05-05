@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --accent: 99 102 241;
+  --accent-hover: 129 140 248;
+  --accent-muted: 79 70 229;
+}
+
 * {
   box-sizing: border-box;
 }

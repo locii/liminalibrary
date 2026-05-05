@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, nativeImage } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, nativeImage, clipboard } from 'electron'
 import { join } from 'path'
 import { createReadStream } from 'fs'
 import { promises as fs } from 'fs'
@@ -9,6 +9,9 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerScanHandlers } from './ipc/scanHandlers'
 import { registerCatalogueHandlers } from './ipc/catalogueHandlers'
 import { registerAudioHandlers } from './ipc/audioHandlers'
+import { registerMfbHandlers } from './ipc/mfbHandlers'
+import { registerAuthHandlers } from './ipc/authHandlers'
+import { registerStudioHandlers } from './ipc/studioHandlers'
 
 function audioMime(filePath: string): string {
   const ext = extname(filePath).toLowerCase()
@@ -124,13 +127,24 @@ app.whenReady().then(() => {
   registerScanHandlers()
   registerCatalogueHandlers()
   registerAudioHandlers()
+  registerMfbHandlers()
+  registerAuthHandlers()
+  registerStudioHandlers()
 
   ipcMain.on('window:setTitle', (_, title: string) => {
     mainWindow?.setTitle(title)
   })
 
+  ipcMain.on('window:setZoom', (_, factor: number) => {
+    mainWindow?.webContents.setZoomFactor(factor)
+  })
+
   ipcMain.handle('shell:showInFolder', (_, filePath: string) => {
     shell.showItemInFolder(filePath)
+  })
+
+  ipcMain.handle('library:copyFile', (_, filePath: string) => {
+    clipboard.writeText(filePath)
   })
 
   ipcMain.on('library:startDrag', (event, filePath: string) => {

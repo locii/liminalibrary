@@ -1,14 +1,43 @@
 import { ipcMain, dialog } from 'electron'
 import { promises as fs } from 'fs'
-import { join, extname, basename, dirname } from 'path'
+import { join, extname, basename, dirname, relative, normalize } from 'path'
+import { homedir, platform } from 'os'
+import { exec } from 'child_process'
+import { promisify } from 'util'
 import { parseFile } from 'music-metadata'
 import { createHash } from 'crypto'
 import type { LibraryFile, ScanResult, WatchedFolder } from '../../shared/types'
 
+const execAsync = promisify(exec)
+
 const AUDIO_EXTENSIONS = new Set(['.wav', '.mp3', '.flac', '.aiff', '.aif', '.m4a'])
+
+function pickArtist(common: { artist?: string; artists?: string[] }): string {
+  const joined = common.artists?.filter(Boolean).join(', ')
+  if (joined) return joined
+  const single = common.artist?.trim()
+  return single ?? ''
+}
+
+function pickAlbum(common: { album?: string }): string {
+  return common.album?.trim() ?? ''
+}
 
 function fileId(filePath: string): string {
   return createHash('sha1').update(filePath).digest('hex').slice(0, 16)
+}
+
+/** Watched-folder relative path …/Artist/Album/ → album = innermost folder, artist = above. Single segment → artist only. */
+function inferPathArtistAlbum(directoryPath: string, libraryRoot: string): { artistPathGuess: string; albumPathGuess: string } {
+  const folder = normalize(directoryPath)
+  const root = normalize(libraryRoot)
+  const rel = relative(root, folder)
+  if (!rel || rel.startsWith('..')) return { artistPathGuess: '', albumPathGuess: '' }
+  const segments = rel.split(/[/\\\\]/).filter(Boolean)
+  const n = segments.length
+  if (n >= 2) return { artistPathGuess: segments[n - 2] ?? '', albumPathGuess: segments[n - 1] ?? '' }
+  if (n === 1) return { artistPathGuess: segments[0] ?? '', albumPathGuess: '' }
+  return { artistPathGuess: '', albumPathGuess: '' }
 }
 
 async function walkDir(dir: string): Promise<string[]> {
@@ -49,11 +78,17 @@ export function registerScanHandlers(): void {
         try {
           const stat = await fs.stat(filePath)
           const meta = await parseFile(filePath, { skipCovers: true, duration: true })
+          const dirPath = dirname(filePath)
+          const pathGuesses = inferPathArtistAlbum(dirPath, folderPath)
           files.push({
             id: fileId(filePath),
             filePath,
             fileName: basename(filePath),
-            folderPath: dirname(filePath),
+            artist: pickArtist(meta.common),
+            album: pickAlbum(meta.common),
+            ...pathGuesses,
+            appliedPathGuess: false,
+            folderPath: dirPath,
             duration: meta.format.duration ?? 0,
             sampleRate: meta.format.sampleRate ?? 0,
             channels: meta.format.numberOfChannels ?? 0,
@@ -65,6 +100,11 @@ export function registerScanHandlers(): void {
             breathworkPhase: null,
             dateAdded: new Date().toISOString(),
             peaks: [],
+            trackTitle: '',
+            mfbTrackId: null,
+            mfbIndexed: false,
+            mfbApplied: false,
+            audioFeatures: null,
           })
         } catch (e) {
           errors.push(`${filePath}: ${e}`)
@@ -83,6 +123,131 @@ export function registerScanHandlers(): void {
       label: basename(folderPath),
       fileCount: paths.length,
       lastScanned: new Date().toISOString(),
+    }
+  })
+
+  ipcMain.handle('library:findOnDisk', async (_, title: string, artist: string): Promise<string[]> => {
+    const results: string[] = []
+
+    // Sanitise a string for shell use
+    const safe = (s: string): string => s.replace(/[\\'"`;|&<>(){}$!\n\r]/g, ' ').trim()
+
+    // Extract meaningful words: drop short words and common stop words
+    const STOP = new Set(['i','a','the','in','of','and','or','to','for','with','no','more',
+      'at','is','it','on','be','as','by','an','my','we','he','she','they','but','not',
+      'from','this','that','are','was','will','can','do','all','so','if','up','out'])
+    function keyWords(s: string): string[] {
+      return s.toLowerCase().split(/\s+/)
+        .map(w => w.replace(/[^a-z0-9]/g, ''))
+        .filter(w => w.length > 2 && !STOP.has(w))
+    }
+
+    const isAudio = (p: string): boolean => AUDIO_EXTENSIONS.has(extname(p).toLowerCase())
+
+    async function mdfindName(term: string): Promise<string[]> {
+      const { stdout } = await execAsync(`mdfind -name ${JSON.stringify(safe(term))}`, { timeout: 5000 })
+      return stdout.trim().split('\n').filter(p => p && isAudio(p))
+    }
+
+    if (platform() === 'darwin') {
+      try {
+        // Try full title first
+        const full = await mdfindName(title)
+        results.push(...full)
+
+        // If nothing, retry with each significant word from title then artist
+        if (results.length === 0) {
+          const words = [...keyWords(title), ...keyWords(artist)]
+          for (const word of words) {
+            const hits = await mdfindName(word)
+            results.push(...hits)
+            if (results.length > 0) break
+          }
+        }
+      } catch { /* mdfind unavailable */ }
+
+    } else if (platform() === 'win32') {
+      const dirs = [join(homedir(), 'Music'), join(homedir(), 'Downloads'), join(homedir(), 'Desktop')]
+        .map(d => `'${d.replace(/'/g, "''")}'`).join(',')
+      const exts = ['*.wav','*.mp3','*.flac','*.aiff','*.aif','*.m4a'].join(',')
+
+      // Build patterns from full title then key words as fallback
+      const patterns = [title, ...keyWords(title), ...keyWords(artist)]
+      for (const term of patterns) {
+        const pat = `*${safe(term)}*`.replace(/'/g, "''")
+        try {
+          const { stdout } = await execAsync(
+            `powershell -NoProfile -Command "Get-ChildItem -Path ${dirs} -Recurse -Include ${exts} -ErrorAction SilentlyContinue | Where-Object { $_.BaseName -like '${pat}' } | Select-Object -ExpandProperty FullName"`,
+            { timeout: 15000 }
+          )
+          results.push(...stdout.trim().split('\r\n').filter(Boolean))
+          if (results.length > 0) break
+        } catch { /* ignore */ }
+      }
+
+    } else {
+      const dirs = [join(homedir(), 'Music'), join(homedir(), 'music')]
+        .filter(d => d).join(' ')
+      const extPats = [...AUDIO_EXTENSIONS].map(e => `-name "*${e}"`).join(' -o ')
+      const patterns = [title, ...keyWords(title), ...keyWords(artist)]
+      for (const term of patterns) {
+        try {
+          const { stdout } = await execAsync(
+            `find ${dirs} -type f \\( ${extPats} \\) -iname ${JSON.stringify(`*${safe(term)}*`)} 2>/dev/null`,
+            { timeout: 15000 }
+          )
+          results.push(...stdout.trim().split('\n').filter(Boolean))
+          if (results.length > 0) break
+        } catch { /* ignore */ }
+      }
+    }
+
+    return [...new Set(results)]
+  })
+
+  ipcMain.handle('library:pickAudioFile', async (): Promise<string | null> => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      title: 'Select audio file',
+      properties: ['openFile'],
+      filters: [{ name: 'Audio', extensions: ['wav','mp3','flac','aiff','aif','m4a'] }],
+    })
+    return canceled ? null : filePaths[0]
+  })
+
+  ipcMain.handle('library:scanFile', async (_, filePath: string): Promise<LibraryFile | null> => {
+    try {
+      const stat = await fs.stat(filePath)
+      const meta = await parseFile(filePath, { skipCovers: true, duration: true })
+      const dirPath = dirname(filePath)
+      return {
+        id: fileId(filePath),
+        filePath,
+        fileName: basename(filePath),
+        artist: pickArtist(meta.common),
+        album: pickAlbum(meta.common),
+        artistPathGuess: '',
+        albumPathGuess: '',
+        appliedPathGuess: false,
+        folderPath: dirPath,
+        duration: meta.format.duration ?? 0,
+        sampleRate: meta.format.sampleRate ?? 0,
+        channels: meta.format.numberOfChannels ?? 0,
+        format: extname(filePath).replace('.', '').toLowerCase(),
+        fileSize: stat.size,
+        tags: [],
+        rating: 0,
+        notes: '',
+        breathworkPhase: null,
+        dateAdded: new Date().toISOString(),
+        peaks: [],
+        trackTitle: '',
+        mfbTrackId: null,
+        mfbIndexed: false,
+        mfbApplied: false,
+        audioFeatures: null,
+      }
+    } catch {
+      return null
     }
   })
 }
