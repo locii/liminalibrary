@@ -6,6 +6,7 @@ interface Props {
   filePath: string
   duration: number
   peaks: number[]
+  sampleRate?: number
 }
 
 const WAVEFORM_COLORS: [string, string][] = [
@@ -32,7 +33,7 @@ function formatTime(s: number): string {
   return `${m}:${String(sec).padStart(2, '0')}`
 }
 
-export function WaveformPreview({ fileId, filePath, duration, peaks }: Props): JSX.Element {
+export function WaveformPreview({ fileId, filePath, duration, peaks, sampleRate }: Props): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const rafRef = useRef<number | null>(null)
@@ -72,7 +73,7 @@ export function WaveformPreview({ fileId, filePath, duration, peaks }: Props): J
   // Create audio element; replace when file changes
   useEffect(() => {
     if (port === null) return
-    const audio = new Audio(`http://127.0.0.1:${port}${encodeURI(filePath)}`)
+    const audio = new Audio(`http://127.0.0.1:${port}${encodeURI(filePath)}?sr=${sampleRate ?? 0}`)
     audioRef.current = audio
     audio.addEventListener('ended', () => { setPlaying(false); setCurrentTime(0) })
     return () => {

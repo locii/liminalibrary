@@ -53,23 +53,26 @@ function startAudioServer(): void {
 
   const server = createServer(async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*')
-    const filePath = decodeURIComponent(new URL('http://x' + (req.url ?? '')).pathname)
+    const url = new URL('http://x' + (req.url ?? ''))
+    const filePath = decodeURIComponent(url.pathname)
     try {
       await fs.stat(filePath)
     } catch {
       res.writeHead(404); res.end(); return
     }
 
-    // Transcode to 48kHz stereo WAV — avoids sample-rate mismatch causing
-    // double-speed playback on AIFF/FLAC files recorded at 96kHz+
-    res.writeHead(200, { 'Content-Type': 'audio/wav' })
-    const ff = spawn(ffmpeg, [
+    // Convert to WAV for browser compatibility. Only resample to 48kHz when the
+    // source is >48kHz (e.g. 96kHz AIFF/FLAC), which would play at 2x otherwise.
+    const sr = parseInt(url.searchParams.get('sr') ?? '0') || 0
+    const ffArgs = [
       '-i', filePath,
-      '-ar', '48000',
-      '-ac', '2',
-      '-f', 'wav',
-      'pipe:1',
-    ])
+      '-vn', '-ac', '2',
+      ...(sr > 48000 ? ['-ar', '48000'] : []),
+      '-f', 'wav', 'pipe:1',
+    ]
+
+    res.writeHead(200, { 'Content-Type': 'audio/wav' })
+    const ff = spawn(ffmpeg, ffArgs)
     ff.stdout.pipe(res)
     ff.stderr.resume()
     req.on('close', () => ff.kill())

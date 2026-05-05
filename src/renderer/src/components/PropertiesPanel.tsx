@@ -354,6 +354,7 @@ export function PropertiesPanel(): JSX.Element {
           filePath={file.filePath}
           duration={file.duration}
           peaks={file.peaks}
+          sampleRate={file.sampleRate}
         />
       </div>
 

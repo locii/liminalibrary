@@ -63,7 +63,7 @@ export function PlayerBar(): JSX.Element | null {
   useEffect(() => {
     if (!file || port === null) return
     audioRef.current?.pause()
-    const audio = new Audio(`http://127.0.0.1:${port}${encodeURI(file.filePath)}`)
+    const audio = new Audio(`http://127.0.0.1:${port}${encodeURI(file.filePath)}?sr=${file.sampleRate ?? 0}`)
     audioRef.current = audio
     setCurrentTime(0)
     audio.addEventListener('ended', () => {
