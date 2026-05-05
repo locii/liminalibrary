@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React from 'react'
 import { useLibraryStore } from '../store/libraryStore'
 import type { LibraryFile, MfbPlaylist } from '../types'
 
@@ -66,17 +66,10 @@ export function PlaylistPanel(): JSX.Element {
   const selectedMissingTrackId = useLibraryStore((s) => s.selectedMissingTrackId)
   const playlistSessions = useLibraryStore((s) => s.playlistSessions)
   const setPlaylistSession = useLibraryStore((s) => s.setPlaylistSession)
+  const previewFileId = useLibraryStore((s) => s.previewFileId)
+  const setPreview = useLibraryStore((s) => s.setPreview)
 
-  const [playingFileId, setPlayingFileId] = useState<string | null>(null)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-  const audioPortRef = useRef<number>(0)
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    window.electronAPI.getAudioServerPort().then((p) => { audioPortRef.current = p })
-  }, [])
-
-  useEffect(() => () => { audioRef.current?.pause() }, [])
+  const [saving, setSaving] = React.useState(false)
 
   const playlist = selectedPlaylistId !== null
     ? playlists.find((p) => p.id === selectedPlaylistId) ?? null
@@ -92,18 +85,16 @@ export function PlaylistPanel(): JSX.Element {
   const missingCount = playlist.tracks.length - matchedCount
   const totalDuration = playlist.tracks.reduce((sum, t) => sum + (fileByMfbId.get(t.id)?.duration ?? 0), 0)
 
-  function togglePreview(filePath: string, fileId: string, e: React.MouseEvent): void {
+  const matchedQueue = playlist.tracks
+    .map((t) => fileByMfbId.get(t.id)?.id)
+    .filter((id): id is string => id !== undefined)
+
+  function togglePreview(fileId: string, e: React.MouseEvent): void {
     e.stopPropagation()
-    if (playingFileId === fileId) {
-      audioRef.current?.pause()
-      setPlayingFileId(null)
+    if (previewFileId === fileId) {
+      setPreview(null, [])
     } else {
-      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null }
-      const audio = new Audio(`http://127.0.0.1:${audioPortRef.current}${encodeURI(filePath)}`)
-      audio.onended = () => setPlayingFileId(null)
-      audio.play().catch(console.error)
-      audioRef.current = audio
-      setPlayingFileId(fileId)
+      setPreview(fileId, matchedQueue)
     }
   }
 
@@ -161,7 +152,7 @@ export function PlaylistPanel(): JSX.Element {
       <div className="overflow-y-auto flex-1 min-h-0">
         {playlist.tracks.map((track, i) => {
           const file = fileByMfbId.get(track.id) ?? null
-          const isPlaying = file !== null && playingFileId === file.id
+          const isPlaying = file !== null && previewFileId === file.id
           const isSelected = file
             ? selectedFileId === file.id
             : selectedMissingTrackId === track.id
@@ -191,7 +182,7 @@ export function PlaylistPanel(): JSX.Element {
               <button
                 type="button"
                 disabled={!file}
-                onClick={(e) => file && togglePreview(file.filePath, file.id, e)}
+                onClick={(e) => file && togglePreview(file.id, e)}
                 className={`shrink-0 w-4 h-4 flex items-center justify-center rounded-full border transition-colors ${
                   isPlaying
                     ? 'border-accent text-accent'

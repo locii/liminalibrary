@@ -1,10 +1,10 @@
 import { app, shell, BrowserWindow, ipcMain, nativeImage, clipboard } from 'electron'
 import { join } from 'path'
-import { createReadStream } from 'fs'
 import { promises as fs } from 'fs'
-import { extname } from 'path'
 import { createServer } from 'http'
+import { spawn } from 'child_process'
 import type { AddressInfo } from 'net'
+import ffmpegPath from 'ffmpeg-static'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
 import { registerScanHandlers } from './ipc/scanHandlers'
@@ -22,13 +22,6 @@ function initAutoUpdater(): void {
   setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 4 * 60 * 60 * 1_000)
 }
 
-function audioMime(filePath: string): string {
-  const ext = extname(filePath).toLowerCase()
-  return (({
-    '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.flac': 'audio/flac',
-    '.aiff': 'audio/aiff', '.aif': 'audio/aiff', '.m4a': 'audio/mp4',
-  }) as Record<string, string>)[ext] ?? 'audio/mpeg'
-}
 
 function createDragIcon(): Electron.NativeImage {
   const size = 32
@@ -56,32 +49,31 @@ function createDragIcon(): Electron.NativeImage {
 let audioServerPort = 0
 
 function startAudioServer(): void {
+  const ffmpeg = (ffmpegPath as string).replace('app.asar', 'app.asar.unpacked')
+
   const server = createServer(async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*')
-    res.setHeader('Accept-Ranges', 'bytes')
     const filePath = decodeURIComponent(new URL('http://x' + (req.url ?? '')).pathname)
     try {
-      const { size } = await fs.stat(filePath)
-      const mime = audioMime(filePath)
-      const rangeHeader = req.headers['range']
-      if (rangeHeader) {
-        const m = rangeHeader.match(/bytes=(\d+)-(\d*)/)
-        if (!m) { res.writeHead(416); res.end(); return }
-        const start = parseInt(m[1], 10)
-        const end = m[2] ? parseInt(m[2], 10) : size - 1
-        res.writeHead(206, {
-          'Content-Type': mime,
-          'Content-Range': `bytes ${start}-${end}/${size}`,
-          'Content-Length': String(end - start + 1),
-        })
-        createReadStream(filePath, { start, end }).pipe(res)
-      } else {
-        res.writeHead(200, { 'Content-Type': mime, 'Content-Length': String(size) })
-        createReadStream(filePath).pipe(res)
-      }
+      await fs.stat(filePath)
     } catch {
-      res.writeHead(404); res.end()
+      res.writeHead(404); res.end(); return
     }
+
+    // Transcode to 48kHz stereo WAV — avoids sample-rate mismatch causing
+    // double-speed playback on AIFF/FLAC files recorded at 96kHz+
+    res.writeHead(200, { 'Content-Type': 'audio/wav' })
+    const ff = spawn(ffmpeg, [
+      '-i', filePath,
+      '-ar', '48000',
+      '-ac', '2',
+      '-f', 'wav',
+      'pipe:1',
+    ])
+    ff.stdout.pipe(res)
+    ff.stderr.resume()
+    req.on('close', () => ff.kill())
+    ff.on('error', () => { res.end() })
   })
   server.listen(0, '127.0.0.1', () => {
     audioServerPort = (server.address() as AddressInfo).port
