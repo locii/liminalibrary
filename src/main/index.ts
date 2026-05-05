@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, nativeImage, clipboard } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, nativeImage, clipboard } from 'electron'
 import { join } from 'path'
 import { createReadStream } from 'fs'
 import { promises as fs } from 'fs'
@@ -6,12 +6,21 @@ import { extname } from 'path'
 import { createServer } from 'http'
 import type { AddressInfo } from 'net'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { autoUpdater } from 'electron-updater'
 import { registerScanHandlers } from './ipc/scanHandlers'
 import { registerCatalogueHandlers } from './ipc/catalogueHandlers'
 import { registerAudioHandlers } from './ipc/audioHandlers'
 import { registerMfbHandlers } from './ipc/mfbHandlers'
 import { registerAuthHandlers } from './ipc/authHandlers'
 import { registerStudioHandlers } from './ipc/studioHandlers'
+
+function initAutoUpdater(): void {
+  autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = true
+  // Check for updates 10s after launch, then every 4 hours
+  setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 10_000)
+  setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 4 * 60 * 60 * 1_000)
+}
 
 function audioMime(filePath: string): string {
   const ext = extname(filePath).toLowerCase()
@@ -116,6 +125,8 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.limina.library')
+
+  if (!is.dev) initAutoUpdater()
 
   startAudioServer()
   ipcMain.handle('audio:getServerPort', () => audioServerPort)

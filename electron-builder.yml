@@ -2,6 +2,11 @@ appId: com.limina.library
 productName: Limina Library
 copyright: Copyright © 2025 Limina Library
 
+publish:
+  provider: github
+  owner: locii
+  repo: liminalibrary
+
 directories:
   buildResources: resources
   output: dist
