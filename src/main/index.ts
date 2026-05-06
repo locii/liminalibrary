@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, nativeImage, clipboard } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, nativeImage, clipboard, Notification } from 'electron'
 import { join } from 'path'
 import { promises as fs } from 'fs'
 import { createServer } from 'http'
@@ -17,7 +17,12 @@ import { registerStudioHandlers } from './ipc/studioHandlers'
 function initAutoUpdater(): void {
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
-  // Check for updates 10s after launch, then every 4 hours
+  autoUpdater.on('update-downloaded', (info) => {
+    new Notification({
+      title: 'Limina Library update ready',
+      body: `v${info.version} downloaded — will install on next launch`,
+    }).show()
+  })
   setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 10_000)
   setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 4 * 60 * 60 * 1_000)
 }
