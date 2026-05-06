@@ -4,6 +4,7 @@ import { useLibraryStore } from '../store/libraryStore'
 export function AccountButton(): JSX.Element {
   const userAccount = useLibraryStore((s) => s.userAccount)
   const setUserAccount = useLibraryStore((s) => s.setUserAccount)
+  const setLoginFlash = useLibraryStore((s) => s.setLoginFlash)
   const showModal = useLibraryStore((s) => s.showLoginModal)
   const setShowModal = useLibraryStore((s) => s.setShowLoginModal)
   const [showMenu, setShowMenu] = useState(false)
@@ -37,11 +38,14 @@ export function AccountButton(): JSX.Element {
     try {
       const user = await window.electronAPI.authLogin(email, password)
       setUserAccount(user)
+      setLoginFlash(true)
       setShowModal(false)
       setEmail('')
       setPassword('')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+      const msg = err instanceof Error ? err.message : ''
+      const isAuthError = /401|403|invalid|incorrect|password|credentials|unauthorized/i.test(msg)
+      setError(isAuthError ? 'Incorrect email or password.' : 'Login failed — please try again.')
     } finally {
       setLoading(false)
     }

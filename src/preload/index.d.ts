@@ -32,7 +32,7 @@ export interface LibraryAPI {
   pickAudioFile: () => Promise<string | null>
 
   // Catalogue persistence
-  loadCatalogue: () => Promise<Catalogue | null>
+  loadCatalogue: () => Promise<{ data: Catalogue | null; restoredFromBackup: boolean }>
   saveCatalogue: (catalogue: Catalogue) => Promise<void>
   listCatalogueBackups: () => Promise<{ slot: number; mtime: string; size: number }[]>
   restoreCatalogueBackup: (slot: number) => Promise<Catalogue | null>

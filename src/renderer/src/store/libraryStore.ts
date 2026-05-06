@@ -67,6 +67,10 @@ interface LibraryState {
   unlinkMfb: (fileId: string) => void
   resetUnmatchedIndexing: () => void
   toCatalogue: () => Catalogue
+  unmatchedOnly: boolean
+  setUnmatchedOnly: (v: boolean) => void
+  loginFlash: boolean
+  setLoginFlash: (v: boolean) => void
   previewFileId: string | null
   previewQueue: string[]
   setPreview: (fileId: string | null, queue: string[]) => void
@@ -88,13 +92,17 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   selectedPlaylistId: null,
   selectedMissingTrackId: null,
   playlistSessions: {},
+  unmatchedOnly: false,
+  setUnmatchedOnly: (v) => set({ unmatchedOnly: v }),
+  loginFlash: false,
+  setLoginFlash: (v) => set({ loginFlash: v }),
   previewFileId: null,
   previewQueue: [],
 
   setUserAccount: (user) => set({ userAccount: user }),
   setShowLoginModal: (show) => set({ showLoginModal: show }),
   setPlaylists: (playlists) => set({ playlists }),
-  selectPlaylist: (id) => set({ selectedPlaylistId: id, selectedFolderId: null, selectedTags: [], selectedFileId: null, selectedMissingTrackId: null }),
+  selectPlaylist: (id) => set({ selectedPlaylistId: id, selectedFolderId: null, selectedTags: [], selectedFileId: null, selectedMissingTrackId: null, unmatchedOnly: false }),
   selectMissingTrack: (id) => set({ selectedMissingTrackId: id, selectedFileId: null }),
 
   setPlaylistSession: (playlistId, filePath) => set((s) => ({
@@ -174,13 +182,14 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
   selectFile: (id) => set({ selectedFileId: id, selectedMissingTrackId: null }),
 
-  selectFolder: (id) => set({ selectedFolderId: id, selectedTags: [], selectedFileId: null, selectedPlaylistId: null }),
+  selectFolder: (id) => set({ selectedFolderId: id, selectedTags: [], selectedFileId: null, selectedPlaylistId: null, unmatchedOnly: false }),
 
   selectTag: (tag) => set((s) => ({
     selectedTags: s.selectedTags.length === 1 && s.selectedTags[0] === tag ? [] : [tag],
     selectedFolderId: null,
     selectedFileId: null,
     selectedPlaylistId: null,
+    unmatchedOnly: false,
   })),
 
   toggleSelectedTag: (tag) => set((s) => {
@@ -267,7 +276,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   })),
 
   resetUnmatchedIndexing: () => set((s) => ({
-    files: s.files.map((f) => !f.mfbTrackId ? { ...f, mfbIndexed: false } : f),
+    files: s.files.map((f) =>
+      !f.mfbTrackId && !s.pendingMatches[f.id] ? { ...f, mfbIndexed: false } : f
+    ),
   })),
 
   toCatalogue: () => ({

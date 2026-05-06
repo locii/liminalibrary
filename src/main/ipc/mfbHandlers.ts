@@ -12,6 +12,8 @@ interface CatalogueTrack {
 }
 
 let catalogueCache: CatalogueTrack[] | null = null
+let catalogueCacheTime = 0
+const CACHE_TTL_MS = 12 * 60 * 60 * 1000 // 12 hours
 
 function fetchJson<T>(url: string): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -28,14 +30,32 @@ function fetchJson<T>(url: string): Promise<T> {
 }
 
 async function getCatalogue(): Promise<CatalogueTrack[]> {
-  if (catalogueCache) return catalogueCache
+  if (catalogueCache && Date.now() - catalogueCacheTime < CACHE_TTL_MS) return catalogueCache
   console.log('[mfb] fetching catalogue...')
   catalogueCache = await fetchJson<CatalogueTrack[]>(`${BASE}/tracks`)
+  catalogueCacheTime = Date.now()
   console.log('[mfb] catalogue loaded:', catalogueCache.length, 'tracks')
   return catalogueCache
 }
 
 const STOP = new Set(['the', 'a', 'an', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'for', 'by', 'with'])
+
+const GENERIC_FOLDER_TOKENS = new Set([
+  'breathwork', 'imported', 'conformed', 'files', 'file', 'media', 'localized',
+  'projects', 'project', 'session', 'sessions', 'mix', 'mixes',
+  'library', 'audio', 'export', 'exports', 'backup', 'backups',
+  'playlist', 'playlists', 'tracks', 'track', 'collection', 'redux',
+  'hour', 'hours', 'volume', 'vol', 'set',
+])
+
+function isNameyFolder(name: string): boolean {
+  if (!name.trim()) return false
+  if (/\b(19|20)\d{2}\b/.test(name)) return false  // contains a year
+  const tokens = normalize(name).split(' ').filter((t) => t.length > 1)
+  if (tokens.length === 0) return false
+  for (const t of tokens) if (GENERIC_FOLDER_TOKENS.has(t)) return false
+  return true
+}
 
 function normalize(s: string): string {
   return s
@@ -81,20 +101,30 @@ function scoreMatch(entry: MatchEntry, track: CatalogueTrack): number {
 
   const titleScore = Math.max(jaccard(fileTokens, trackTitleTokens), jaccard(titleOnlyTokens, trackTitleTokens))
 
-  const artistSources = [entry.artist, entry.folder_artist].filter(Boolean)
+  // ID3 artist is always trusted; folder names only count if they look like real names
+  const artistSources = [
+    entry.artist,
+    isNameyFolder(entry.folder_artist) ? entry.folder_artist : '',
+  ].filter(Boolean)
   const hasArtistContext = artistSources.length > 0
   const artistScore = hasArtistContext
     ? Math.max(...artistSources.map((a) => jaccard(tokenize(a), trackArtistTokens)))
     : 0
 
-  // Hard reject: title must match something, and artist context must match if present
+  // Hard reject: title must match something
   if (titleScore === 0) return 0
-  if (hasArtistContext && artistScore === 0) return 0
 
-  const albumScore = entry.folder_album ? jaccard(tokenize(entry.folder_album), trackAlbumTokens) : 0
+  // Album context only counts when the folder name looks like a real album title
+  const albumSource = isNameyFolder(entry.folder_album) ? entry.folder_album : ''
+  const albumScore = albumSource ? jaccard(tokenize(albumSource), trackAlbumTokens) : 0
 
   // When we have artist context, weight it heavily — title alone isn't enough
   if (hasArtistContext) {
+    if (artistScore === 0) {
+      // Artist is completely wrong — cap below the auto-match threshold so it
+      // still surfaces in manual ranked results but never gets auto-suggested
+      return Math.min(titleScore * 0.45 + albumScore * 0.1, 0.22)
+    }
     return titleScore * 0.45 + artistScore * 0.45 + albumScore * 0.1
   }
   return titleScore * 0.7 + artistScore * 0.2 + albumScore * 0.1
@@ -102,7 +132,19 @@ function scoreMatch(entry: MatchEntry, track: CatalogueTrack): number {
 
 export function registerMfbHandlers(): void {
   ipcMain.handle('mfb:searchTracks', async (_, query: string) => {
-    return fetchJson(`${BASE}/tracks/search?q=${encodeURIComponent(query)}&limit=20`)
+    const catalogue = await getCatalogue()
+    const terms = query.toLowerCase().trim().split(/\s+/).filter((t) => t.length > 0)
+    if (terms.length === 0) return []
+    return catalogue
+      .map((track) => {
+        const haystack = `${track.title} ${track.artist} ${track.album}`.toLowerCase()
+        const hits = terms.filter((t) => haystack.includes(t)).length
+        return { ...track, hits }
+      })
+      .filter((r) => r.hits > 0)
+      .sort((a, b) => b.hits - a.hits || a.title.localeCompare(b.title))
+      .slice(0, 20)
+      .map(({ hits: _, ...r }) => r)
   })
 
   ipcMain.handle('mfb:getTrack', async (_, id: number) => {
@@ -184,5 +226,6 @@ export function registerMfbHandlers(): void {
 
   ipcMain.handle('mfb:clearCatalogue', () => {
     catalogueCache = null
+    catalogueCacheTime = 0
   })
 }

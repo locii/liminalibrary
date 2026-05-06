@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef, useState } from 'react'
-import creamLogo from './assets/creamLogo.png'
+import libraryLogo from './assets/libraryLogo.png'
 import { useLibraryStore } from './store/libraryStore'
 import { FolderPanel } from './components/FolderPanel'
 import { FileList } from './components/FileList'
@@ -52,7 +52,7 @@ export default function App(): JSX.Element {
       if (cancelledRef.current) return
       if (!useLibraryStore.getState().userAccount) { setIndexing(false); return }
       const state = useLibraryStore.getState()
-      const batch = state.files.filter((f) => !f.mfbIndexed).slice(0, BATCH_SIZE)
+      const batch = state.files.filter((f) => !f.mfbIndexed && !state.pendingMatches[f.id]).slice(0, BATCH_SIZE)
       if (batch.length === 0) { setIndexing(false); window.electronAPI.mfbClearCatalogue(); return }
 
       setIndexing(true)
@@ -135,19 +135,30 @@ export default function App(): JSX.Element {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userAccount])
 
+  const [restoredFromBackup, setRestoredFromBackup] = useState(false)
+  const loginFlash = useLibraryStore((s) => s.loginFlash)
+  const setLoginFlash = useLibraryStore((s) => s.setLoginFlash)
+  const [catalogueLoaded, setCatalogueLoaded] = useState(false)
+
   // Load catalogue on mount — mark loaded before subscribing to saves
   useEffect(() => {
-    window.electronAPI.loadCatalogue().then((catalogue) => {
-      if (catalogue) loadCatalogue(catalogue)
+    window.electronAPI.loadCatalogue().then(({ data, restoredFromBackup: restored }) => {
+      if (data) loadCatalogue(data)
+      if (restored) setRestoredFromBackup(true)
       catalogueLoadedRef.current = true
+      setCatalogueLoaded(true)
     })
   }, [loadCatalogue])
 
-  // Persist catalogue whenever state changes — but never before initial load
+  // Persist catalogue whenever state changes — debounced so rapid updates don't race
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
     return useLibraryStore.subscribe(() => {
       if (!catalogueLoadedRef.current) return
-      window.electronAPI.saveCatalogue(useLibraryStore.getState().toCatalogue())
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        window.electronAPI.saveCatalogue(useLibraryStore.getState().toCatalogue())
+      }, 800)
     })
   }, [])
 
@@ -260,6 +271,28 @@ export default function App(): JSX.Element {
         className="h-7 shrink-0 bg-surface-panel"
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       />
+
+      {/* Login success flash */}
+      {loginFlash && userAccount && (
+        <LoginFlash name={userAccount.name} onDismiss={() => setLoginFlash(false)} />
+      )}
+
+      {/* Backup restore banner */}
+      {restoredFromBackup && (
+        <div className="flex items-center justify-between px-4 py-2 bg-accent/15 border-b border-accent/30 text-[11px] text-accent shrink-0">
+          <span>Your library was restored from a backup — everything should be back to normal.</span>
+          <button
+            type="button"
+            onClick={() => setRestoredFromBackup(false)}
+            className="ml-4 opacity-60 hover:opacity-100 transition-opacity"
+            aria-label="Dismiss"
+          >
+            <svg className="w-3 h-3" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <path d="M2 2l6 6M8 2l-6 6" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Top bar */}
       <div className="flex justify-between items-center px-4 h-10 border-b shrink-0 bg-surface-panel border-surface-border">
@@ -459,7 +492,7 @@ export default function App(): JSX.Element {
         />
       )}
 
-      {hasContent && !showWelcome ? (
+      {!catalogueLoaded ? null : hasContent && !showWelcome ? (
         <div className="flex flex-1 min-h-0">
           <FolderPanel onAddFolder={handleAddFolder} />
           <div className="flex flex-col flex-1 min-h-0 min-w-0">
@@ -498,6 +531,24 @@ export default function App(): JSX.Element {
           }}
         />
       )}
+    </div>
+  )
+}
+
+function LoginFlash({ name, onDismiss }: { name: string; onDismiss: () => void }): JSX.Element {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 4000)
+    return () => clearTimeout(t)
+  }, [onDismiss])
+
+  return (
+    <div className="flex items-center justify-between px-4 py-2 bg-accent/15 border-b border-accent/30 text-[11px] text-accent shrink-0">
+      <span>Signed in as {name}</span>
+      <button type="button" onClick={onDismiss} className="ml-4 opacity-60 hover:opacity-100 transition-opacity" aria-label="Dismiss">
+        <svg className="w-3 h-3" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <path d="M2 2l6 6M8 2l-6 6" />
+        </svg>
+      </button>
     </div>
   )
 }
@@ -549,7 +600,7 @@ function WelcomeScreen({ onAddFolder, hasContent, onClose }: {
 
         {/* Identity */}
         <div className="flex flex-col gap-3 items-center text-center">
-          <img src={creamLogo} alt="Limina" className="object-contain w-40 h-40 rounded-lg" />
+          <img src={libraryLogo} alt="Limina Library" className="object-contain w-40 h-40 rounded-2xl" />
           <div>
             <h1 className="text-base font-semibold tracking-wide text-gray-100">Limina Library</h1>
             <p className="text-[11px] text-gray-500 mt-0.5">v1.0.0 · Companion app for Music for Breathwork</p>

@@ -154,13 +154,25 @@ export function PropertiesPanel(): JSX.Element {
           <p className="text-[10px] text-gray-300 truncate">
             {pendingMatch.artists.map((a) => a.name).join(', ')} · {pendingMatch.album.title}
           </p>
-          <button
-            type="button"
-            onClick={() => applyPendingMatch(file.id)}
-            className="w-full mt-0.5 py-1 text-[11px] rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
-          >
-            Apply to Track
-          </button>
+          <div className="flex gap-2 mt-0.5">
+            <button
+              type="button"
+              onClick={() => applyPendingMatch(file.id)}
+              className="flex-1 py-1 text-[11px] rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+            >
+              Apply to Track
+            </button>
+            <button
+              type="button"
+              onClick={() => window.open(mfbTrackUrl(pendingMatch.id, pendingMatch.title))}
+              title="View on Music for Breathwork"
+              className="px-2.5 py-1 text-[11px] rounded border border-surface-border text-gray-400 hover:text-gray-200 hover:bg-surface-hover transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8A1.5 1.5 0 0 0 13 12.5V9M9.5 2H14v4.5M14 2L7.5 8.5" />
+              </svg>
+            </button>
+          </div>
         </div>
       )}
 

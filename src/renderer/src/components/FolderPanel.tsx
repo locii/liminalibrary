@@ -65,6 +65,8 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
   const toggleSelectedTag = useLibraryStore((s) => s.toggleSelectedTag)
   const clearSelectedTags = useLibraryStore((s) => s.clearSelectedTags)
   const removeWatchedFolder = useLibraryStore((s) => s.removeWatchedFolder)
+  const unmatchedOnly = useLibraryStore((s) => s.unmatchedOnly)
+  const setUnmatchedOnly = useLibraryStore((s) => s.setUnmatchedOnly)
   const files = useLibraryStore((s) => s.files)
   const scanning = useLibraryStore((s) => s.scanning)
   const userAccount = useLibraryStore((s) => s.userAccount)
@@ -73,6 +75,8 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
   const selectPlaylist = useLibraryStore((s) => s.selectPlaylist)
 
   const totalFiles = files.length
+  const matchedFiles = files.filter((f) => f.mfbTrackId !== null).length
+  const unmatchedCount = totalFiles - matchedFiles
   const sidebarTags = buildSidebarTags(files)
 
   // Fetch playlists whenever the user logs in
@@ -198,9 +202,9 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
         <>
           <button
             type="button"
-            onClick={() => selectFolder(null)}
+            onClick={() => { selectFolder(null); setUnmatchedOnly(false) }}
             className={`flex items-center justify-between px-3 py-1.5 text-left transition-colors ${
-              selectedFolderId === null
+              selectedFolderId === null && !unmatchedOnly
                 ? 'bg-accent/15 text-gray-200'
                 : 'text-gray-400 hover:bg-surface-hover hover:text-gray-200'
             }`}
@@ -208,8 +212,20 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
             <span className="text-[11px] font-medium">All Files</span>
             <span className="text-[10px] text-gray-600 tabular-nums">{totalFiles}</span>
           </button>
-
-
+          {userAccount && unmatchedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => { selectFolder(null); setUnmatchedOnly(!unmatchedOnly) }}
+              className={`flex items-center justify-between px-3 py-1.5 text-left transition-colors ${
+                unmatchedOnly
+                  ? 'bg-accent/15 text-gray-200'
+                  : 'text-gray-400 hover:bg-surface-hover hover:text-gray-200'
+              }`}
+            >
+              <span className="text-[11px]">Unmatched</span>
+              <span className="text-[10px] tabular-nums text-yellow-600">{unmatchedCount}</span>
+            </button>
+          )}
         </>
       )}
 
@@ -401,8 +417,11 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
           </button>
         )}
         {totalFiles > 0 && (
-          <p className="text-center text-[10px] text-gray-400 mt-1">
-            {totalFiles} file{totalFiles === 1 ? '' : 's'} total
+          <p className="text-center text-[10px] text-gray-600 mt-1">
+            <span className={matchedFiles === totalFiles ? 'text-accent' : 'text-gray-400'}>
+              {matchedFiles}
+            </span>
+            <span> / {totalFiles} matched</span>
           </p>
         )}
       </div>

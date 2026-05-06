@@ -14,42 +14,69 @@ function backupPath(n: number): string {
 }
 
 async function rotateBackups(current: string): Promise<void> {
+  // Use readFile+writeFile (not copyFile) so each slot gets a fresh mtime
   // Shift older backups down: 4→5, 3→4, 2→3, 1→2
   for (let i = BACKUP_COUNT - 1; i >= 1; i--) {
     try {
-      await fs.copyFile(backupPath(i), backupPath(i + 1))
+      const data = await fs.readFile(backupPath(i))
+      await fs.writeFile(backupPath(i + 1), data)
     } catch {
       // older slot may not exist yet — that's fine
     }
   }
   // current → 1
   try {
-    await fs.copyFile(current, backupPath(1))
+    const data = await fs.readFile(current)
+    await fs.writeFile(backupPath(1), data)
   } catch {
     // current may not exist on first run
   }
 }
 
+function hasContent(catalogue: Catalogue): boolean {
+  return (catalogue.watchedFolders?.length ?? 0) > 0 || (catalogue.files?.length ?? 0) > 0
+}
+
 export function registerCatalogueHandlers(): void {
-  ipcMain.handle('catalogue:load', async (): Promise<Catalogue | null> => {
+  ipcMain.handle('catalogue:load', async (): Promise<{ data: Catalogue | null; restoredFromBackup: boolean }> => {
     const path = cataloguePath()
+
+    // Try current catalogue first
     try {
       const json = await fs.readFile(path, 'utf-8')
       const catalogue = JSON.parse(json) as Catalogue
-      // Back up only when the file has real content
-      if (catalogue.watchedFolders?.length > 0 || catalogue.files?.length > 0) {
+      if (hasContent(catalogue)) {
         rotateBackups(path).catch(() => {})
+        return { data: catalogue, restoredFromBackup: false }
       }
-      return catalogue
+      // File exists but is empty — fall through to backups
     } catch {
-      return null
+      // File missing or corrupt — fall through to backups
     }
+
+    // Auto-restore from the most recent valid backup
+    for (let i = 1; i <= BACKUP_COUNT; i++) {
+      try {
+        const json = await fs.readFile(backupPath(i), 'utf-8')
+        const catalogue = JSON.parse(json) as Catalogue
+        if (hasContent(catalogue)) {
+          // Write back as current so the next load is fast
+          fs.writeFile(path, json, 'utf-8').catch(() => {})
+          return { data: catalogue, restoredFromBackup: true }
+        }
+      } catch { /* slot missing or corrupt */ }
+    }
+
+    return { data: null, restoredFromBackup: false }
   })
 
   ipcMain.handle('catalogue:save', async (_, catalogue: Catalogue): Promise<void> => {
     const path = cataloguePath()
+    const tmp = `${path}.${Date.now()}.tmp`
     await fs.mkdir(join(path, '..'), { recursive: true })
-    await fs.writeFile(path, JSON.stringify(catalogue, null, 2), 'utf-8')
+    // Atomic write: unique tmp name per call prevents concurrent saves from colliding
+    await fs.writeFile(tmp, JSON.stringify(catalogue, null, 2), 'utf-8')
+    await fs.rename(tmp, path)
   })
 
   ipcMain.handle('catalogue:listBackups', async (): Promise<{ slot: number; mtime: string; size: number }[]> => {

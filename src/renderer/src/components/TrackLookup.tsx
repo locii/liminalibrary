@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { BREATHWORK_PHASES } from '../types'
+import { useState, useEffect, useRef } from 'react'
+import { BREATHWORK_PHASES, mfbTrackUrl } from '../types'
 import type { BreathworkPhase, MfbAudioFeatures } from '../types'
 import { useLibraryStore } from '../store/libraryStore'
 import type { MfbRankResult } from '../../../preload/index.d'
@@ -7,6 +7,7 @@ import type { MfbRankResult } from '../../../preload/index.d'
 interface ApiArtist { id: number; name: string }
 interface ApiAlbum { id: number; title: string; image_url: string }
 interface ApiTag { id: number; name: string; slug: { en: string } }
+interface SearchResult { id: number; title: string; artist: string; album: string }
 
 interface TrackDetail {
   id: number
@@ -42,6 +43,10 @@ export function TrackLookup({ fileId, fileName, artist, folderArtist, folderAlbu
   const [results, setResults] = useState<MfbRankResult[]>([])
   const [detail, setDetail] = useState<TrackDetail | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const updateFile = useLibraryStore((s) => s.updateFile)
   const userAccount = useLibraryStore((s) => s.userAccount)
@@ -53,11 +58,27 @@ export function TrackLookup({ fileId, fileName, artist, folderArtist, folderAlbu
     setResults([])
     setDetail(null)
     setErrorMsg('')
+    setSearchQuery('')
+    setSearchResults([])
     window.electronAPI
       .mfbRankMatches({ id: fileId, filename: fileName, artist, folder_artist: folderArtist, folder_album: folderAlbum })
       .then((res) => { setResults(res); setStatus('idle') })
       .catch((e) => { setErrorMsg(String(e)); setStatus('error') })
   }, [expanded, fileId, fileName, artist, folderArtist, folderAlbum])
+
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    const q = searchQuery.trim()
+    if (!q) { setSearchResults([]); setSearching(false); return }
+    setSearching(true)
+    searchTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await window.electronAPI.mfbSearchTracks(q) as SearchResult[]
+        setSearchResults(res)
+      } catch { setSearchResults([]) }
+      finally { setSearching(false) }
+    }, 350)
+  }, [searchQuery])
 
   async function selectResult(id: number): Promise<void> {
     setStatus('fetching')
@@ -197,11 +218,65 @@ export function TrackLookup({ fileId, fileName, artist, folderArtist, folderAlbu
         <p className="text-[10px] text-red-400 leading-snug">{errorMsg}</p>
       )}
 
-      {status === 'idle' && results.length === 0 && !detail && (
-        <p className="text-[10px] text-gray-500">No matches found</p>
+      {/* Search input — visible when ranked results are in and not showing detail */}
+      {!detail && status !== 'loading' && (
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search catalogue by title or artist…"
+            className="w-full text-[11px] bg-surface-hover border border-surface-border rounded px-2.5 py-1.5 outline-none focus:border-accent/50 text-gray-200 placeholder-gray-600"
+          />
+          {searching && (
+            <svg className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-600 animate-spin" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M6 1v2M6 9v2M1 6h2M9 6h2" strokeLinecap="round" />
+              <path d="M2.5 2.5l1.4 1.4M8.1 8.1l1.4 1.4M9.5 2.5L8.1 3.9M3.9 8.1L2.5 9.5" strokeLinecap="round" opacity="0.4" />
+            </svg>
+          )}
+          {searchQuery && !searching && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400 transition-colors"
+            >
+              <svg className="w-3 h-3" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M2 2l6 6M8 2l-6 6" />
+              </svg>
+            </button>
+          )}
+        </div>
       )}
 
-      {results.length > 0 && !detail && status === 'idle' && (
+      {/* Search results */}
+      {searchQuery && !searching && searchResults.length > 0 && !detail && (
+        <div className="flex overflow-hidden overflow-y-auto flex-col max-h-52 rounded border divide-y border-surface-border divide-surface-border">
+          {searchResults.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => selectResult(r.id)}
+              className="flex gap-2 items-start px-2 py-2 text-left transition-colors hover:bg-accent/10"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] text-gray-300 truncate">{r.title}</p>
+                <p className="text-[10px] text-gray-600 truncate">{r.artist} · {r.album}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {searchQuery && !searching && searchResults.length === 0 && !detail && (
+        <p className="text-[10px] text-gray-500">No results for &ldquo;{searchQuery}&rdquo;</p>
+      )}
+
+      {/* Ranked results (shown when no search query) */}
+      {!searchQuery && status === 'idle' && results.length === 0 && !detail && (
+        <p className="text-[10px] text-gray-500">No automatic matches — try searching above</p>
+      )}
+
+      {!searchQuery && results.length > 0 && !detail && status === 'idle' && (
         <div className="flex overflow-hidden overflow-y-auto flex-col max-h-52 rounded border divide-y border-surface-border divide-surface-border">
           {results.map((r) => (
             <button
@@ -250,13 +325,25 @@ export function TrackLookup({ fileId, fileName, artist, folderArtist, folderAlbu
             <p className="text-[10px] text-gray-600 leading-relaxed line-clamp-3">{detail.description}</p>
           )}
 
-          <button
-            type="button"
-            onClick={apply}
-            className="py-1.5 text-[11px] rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
-          >
-            Apply to Track
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={apply}
+              className="flex-1 py-1.5 text-[11px] rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+            >
+              Apply to Track
+            </button>
+            <button
+              type="button"
+              onClick={() => window.open(mfbTrackUrl(detail.id, detail.title))}
+              title="View on Music for Breathwork"
+              className="px-2.5 py-1.5 text-[11px] rounded border border-surface-border text-gray-400 hover:text-gray-200 hover:bg-surface-hover transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8A1.5 1.5 0 0 0 13 12.5V9M9.5 2H14v4.5M14 2L7.5 8.5" />
+              </svg>
+            </button>
+          </div>
         </div>
       )}
     </div>
