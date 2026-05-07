@@ -202,6 +202,23 @@ export function PlayerBar(): JSX.Element | null {
     setPreview(null, [])
   }, [setPreview])
 
+  const [checkState, setCheckState] = useState<'idle' | 'checking' | 'upToDate'>('idle')
+  const handleCheckForUpdates = useCallback(async () => {
+    if (checkState !== 'idle') return
+    setCheckState('checking')
+    try {
+      const result = await window.electronAPI.checkForUpdates()
+      if (!result.hasUpdate) {
+        setCheckState('upToDate')
+        setTimeout(() => setCheckState('idle'), 2500)
+      } else {
+        setCheckState('idle')
+      }
+    } catch {
+      setCheckState('idle')
+    }
+  }, [checkState])
+
   const updateBadge = (
     <span className="flex items-center gap-1.5 text-[10px] text-gray-700 select-none tabular-nums shrink-0">
       {readyVersion ? (
@@ -221,7 +238,20 @@ export function PlayerBar(): JSX.Element | null {
             Downloading update{downloadPercent > 0 ? ` ${downloadPercent}%` : '…'}
           </span>
         </>
-      ) : null}
+      ) : checkState === 'checking' ? (
+        <span className="text-gray-500">Checking…</span>
+      ) : checkState === 'upToDate' ? (
+        <span className="text-gray-500">Up to date</span>
+      ) : (
+        <button
+          type="button"
+          onClick={handleCheckForUpdates}
+          title="Check for updates"
+          className="text-gray-600 hover:text-gray-300 cursor-pointer underline underline-offset-2"
+        >
+          Check for updates
+        </button>
+      )}
       <span>v{__APP_VERSION__}</span>
     </span>
   )
