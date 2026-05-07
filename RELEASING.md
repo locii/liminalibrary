@@ -12,7 +12,21 @@ Limina Mix** (`v0.7.x`) — only the version numbers and repo URLs differ.
 
 ## 1. Normal release (new version)
 
-Bump the version in `package.json`, commit, tag at `HEAD`, push both:
+**Before tagging**, add a section to `CHANGELOG.md` for the new version
+— the workflow reads it as the GitHub release body, and the changelog
+page on getliminastudio filters out releases with empty bodies.
+
+```markdown
+## v0.5.6
+
+- **Short headline in bold** — One-line user-facing description.
+- **Another change** — Same shape.
+```
+
+The heading must match the tag exactly (`## v0.5.6`, optionally followed
+by space + extra text on the same line).
+
+Then bump the version in `package.json`, commit, tag at `HEAD`, push both:
 
 ```sh
 # After editing package.json's "version" field and committing:
