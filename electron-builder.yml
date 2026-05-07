@@ -29,8 +29,13 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  # Both targets ship: dmg for first-time install, zip for electron-updater
+  # (Squirrel.Mac applies updates from a zipped .app, not from a dmg).
   target:
     - target: dmg
+      arch:
+        - arm64
+    - target: zip
       arch:
         - arm64
   darkModeSupport: true
