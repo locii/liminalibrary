@@ -11,6 +11,7 @@ import { PlaylistPanel } from './components/PlaylistPanel'
 import { GuidedTour } from './components/GuidedTour'
 import { PlayerBar } from './components/PlayerBar'
 import { SettingsPanel } from './components/SettingsPanel'
+import { ReindexDialog } from './components/ReindexDialog'
 import { loadSettings, saveSettings, applySettings } from './lib/settings'
 import type { AppSettings } from './lib/settings'
 import { useUpdaterStore } from './store/updaterStore'
@@ -41,6 +42,8 @@ export default function App(): JSX.Element {
   const pendingCount = Object.keys(pendingMatches).length
   const applyAllPendingMatches = useLibraryStore((s) => s.applyAllPendingMatches)
   const resetUnmatchedIndexing = useLibraryStore((s) => s.resetUnmatchedIndexing)
+  const resetAllIndexing = useLibraryStore((s) => s.resetAllIndexing)
+  const [showReindexDialog, setShowReindexDialog] = useState(false)
   const userAccount = useLibraryStore((s) => s.userAccount)
 
   const [indexing, setIndexing] = useState(false)
@@ -402,7 +405,7 @@ export default function App(): JSX.Element {
                   <button
                     data-tour="re-index"
                     type="button"
-                    onClick={() => { setShowUtilMenu(false); resetUnmatchedIndexing(); startIndexing() }}
+                    onClick={() => { setShowUtilMenu(false); setShowReindexDialog(true) }}
                     className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-gray-300 hover:bg-surface-hover hover:text-gray-100 transition-colors"
                   >
                     <svg className="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -500,6 +503,18 @@ export default function App(): JSX.Element {
         <IndexingLog
           onClose={() => setShowLog(false)}
           onSelectFile={(id) => { selectFile(id); setShowLog(false) }}
+        />
+      )}
+
+      {showReindexDialog && (
+        <ReindexDialog
+          onClose={() => setShowReindexDialog(false)}
+          onConfirm={(mode) => {
+            setShowReindexDialog(false)
+            if (mode === 'all') resetAllIndexing()
+            else resetUnmatchedIndexing()
+            startIndexing()
+          }}
         />
       )}
 

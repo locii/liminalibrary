@@ -66,6 +66,7 @@ interface LibraryState {
   applyAllPendingMatches: () => void
   unlinkMfb: (fileId: string) => void
   resetUnmatchedIndexing: () => void
+  resetAllIndexing: () => void
   toCatalogue: () => Catalogue
   unmatchedOnly: boolean
   setUnmatchedOnly: (v: boolean) => void
@@ -279,6 +280,21 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     files: s.files.map((f) =>
       !f.mfbTrackId && !s.pendingMatches[f.id] ? { ...f, mfbIndexed: false } : f
     ),
+  })),
+
+  resetAllIndexing: () => set((s) => ({
+    pendingMatches: {},
+    files: s.files.map((f) => ({
+      ...f,
+      mfbTrackId: null,
+      mfbApplied: false,
+      mfbIndexed: false,
+      trackTitle: '',
+      breathworkPhase: null,
+      tags: [],
+      audioFeatures: null,
+      notes: '',
+    })),
   })),
 
   toCatalogue: () => ({
