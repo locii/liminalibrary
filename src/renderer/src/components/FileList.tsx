@@ -1,4 +1,4 @@
-import type { CSSProperties, MouseEvent } from 'react'
+import type { CSSProperties } from 'react'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 
 interface ContextMenuState {
@@ -20,10 +20,21 @@ import type { LibraryFile, MfbPlaylistTrack } from '../types'
 import { mfbTrackUrl, phaseColorForTag } from '../types'
 import { useLibraryStore } from '../store/libraryStore'
 
-const COLUMN_STORAGE_KEY = 'library-file-list-column-widths-v4'
+const COLUMN_STORAGE_KEY = 'library-file-list-column-widths-v6'
 const GRIP_PX = 8
 const ROW_HEIGHT = 28
 const OVERSCAN = 5
+const TABLE_HORIZONTAL_PADDING = 24 // px-3 each side
+
+const HOUR_TAGS = new Set([
+  'call to adventure', 'jumpstart', 'first hour', 'second hour transition',
+  'second hour', 'breakthrough tension', 'breakthrough', 'breakthrough release',
+  'third hour transition', 'third hour',
+])
+
+function hourTagsForFile(tags: readonly string[]): string[] {
+  return tags.filter((t) => HOUR_TAGS.has(t.toLowerCase()))
+}
 
 type ColumnWidths = {
   name: number
@@ -38,84 +49,103 @@ type ColumnWidths = {
   valence: number
   danceability: number
   duration: number
+  hour: number
   format: number
   size: number
 }
 
 const COLUMN_DEFAULTS: ColumnWidths = {
-  name: 180,
-  artist: 120,
-  album: 120,
-  intensity: 44,
-  affective: 44,
-  activation: 44,
-  spaciousness: 44,
-  tension: 44,
-  energy: 44,
-  valence: 44,
-  danceability: 48,
-  duration: 48,
-  format: 40,
-  size: 56,
+  name: 300,
+  artist: 200,
+  album: 200,
+  hour: 350, // overridden by auto-fit until user drags
+  intensity: 70,
+  affective: 70,
+  activation: 78,
+  spaciousness: 92,
+  tension: 60,
+  energy: 56,
+  valence: 60,
+  danceability: 92,
+  duration: 68,
+  format: 60,
+  size: 64,
 }
 
 const COLUMN_MIN: ColumnWidths = {
-  name: 80,
-  artist: 52,
-  album: 52,
-  intensity: 28,
-  affective: 28,
-  activation: 28,
-  spaciousness: 28,
-  tension: 28,
-  energy: 28,
-  valence: 28,
-  danceability: 28,
-  duration: 36,
-  format: 28,
-  size: 40,
+  name: 120,
+  artist: 60,
+  album: 60,
+  hour: 60,
+  intensity: 32,
+  affective: 32,
+  activation: 32,
+  spaciousness: 32,
+  tension: 32,
+  energy: 32,
+  valence: 32,
+  danceability: 32,
+  duration: 42,
+  format: 32,
+  size: 46,
 }
+
+// Width needed for the hour cell to show all chips inline.
+// Each chip: ~5.5px/char + 10px h-padding + 2px border; gap: 4px between chips; cell: 8px h-padding.
+function hourCellWidth(tags: readonly string[]): number {
+  if (tags.length === 0) return 0
+  let w = 8
+  for (let i = 0; i < tags.length; i++) {
+    w += tags[i].length * 5.5 + 12
+    if (i > 0) w += 4
+  }
+  return Math.ceil(w)
+}
+
+type StoredWidths = ColumnWidths & { hourUserSet?: boolean }
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n))
 }
 
-function readStoredColumnWidths(): ColumnWidths {
-  if (typeof localStorage === 'undefined') return { ...COLUMN_DEFAULTS }
+function readStoredColumnWidths(): StoredWidths {
+  if (typeof localStorage === 'undefined') return { ...COLUMN_DEFAULTS, hourUserSet: false }
   try {
     const raw = localStorage.getItem(COLUMN_STORAGE_KEY)
-    if (!raw) return { ...COLUMN_DEFAULTS }
-    const p = JSON.parse(raw) as Partial<Record<keyof ColumnWidths, unknown>>
-    const next = { ...COLUMN_DEFAULTS }
+    if (!raw) return { ...COLUMN_DEFAULTS, hourUserSet: false }
+    const p = JSON.parse(raw) as Partial<Record<keyof StoredWidths, unknown>>
+    const next: StoredWidths = { ...COLUMN_DEFAULTS, hourUserSet: false }
     for (const k of Object.keys(COLUMN_DEFAULTS) as (keyof ColumnWidths)[]) {
       const v = p[k]
       if (typeof v === 'number' && Number.isFinite(v)) next[k] = Math.round(v)
     }
+    if (typeof p.hourUserSet === 'boolean') next.hourUserSet = p.hourUserSet
     return next
   } catch {
-    return { ...COLUMN_DEFAULTS }
+    return { ...COLUMN_DEFAULTS, hourUserSet: false }
   }
 }
 
-/** All grips do pairwise transfer between adjacent columns */
+const GRIP_PAIRS: [keyof ColumnWidths, keyof ColumnWidths][] = [
+  ['name', 'artist'],
+  ['artist', 'album'],
+  ['album', 'hour'],
+  ['hour', 'intensity'],
+  ['intensity', 'affective'],
+  ['affective', 'activation'],
+  ['activation', 'spaciousness'],
+  ['spaciousness', 'tension'],
+  ['tension', 'energy'],
+  ['energy', 'valence'],
+  ['valence', 'danceability'],
+  ['danceability', 'duration'],
+  ['duration', 'format'],
+  ['format', 'size'],
+]
+
 function applyColumnGrip(gripIdx: number, base: ColumnWidths, dx: number): ColumnWidths {
   if (dx === 0) return base
-  const pairs: [keyof ColumnWidths, keyof ColumnWidths][] = [
-    ['name', 'artist'],
-    ['artist', 'album'],
-    ['album', 'intensity'],
-    ['intensity', 'affective'],
-    ['affective', 'activation'],
-    ['activation', 'spaciousness'],
-    ['spaciousness', 'tension'],
-    ['tension', 'energy'],
-    ['energy', 'valence'],
-    ['valence', 'danceability'],
-    ['danceability', 'duration'],
-    ['duration', 'format'],
-    ['format', 'size'],
-  ]
-  const pair = pairs[gripIdx]
+  const pair = GRIP_PAIRS[gripIdx]
   if (!pair) return base
   const [L, R] = pair
   const minL = COLUMN_MIN[L]
@@ -127,7 +157,7 @@ function applyColumnGrip(gripIdx: number, base: ColumnWidths, dx: number): Colum
   return { ...base, [L]: nl, [R]: nr }
 }
 
-type SortKey = 'fileName' | 'artist' | 'album' | 'duration' | 'format' | 'fileSize' | 'intensity' | 'affective' | 'activation' | 'spaciousness' | 'tension' | 'energy' | 'valence' | 'danceability'
+type SortKey = 'fileName' | 'artist' | 'album' | 'hour' | 'duration' | 'format' | 'fileSize' | 'intensity' | 'affective' | 'activation' | 'spaciousness' | 'tension' | 'energy' | 'valence' | 'danceability'
 type SortDir = 'asc' | 'desc'
 type SortEntry = { key: SortKey; dir: SortDir }
 
@@ -162,6 +192,9 @@ function sortFiles(files: LibraryFile[], sorts: SortEntry[]): LibraryFile[] {
           break
         case 'album':
           c = albumSortKey(a).localeCompare(albumSortKey(b), undefined, { sensitivity: 'base' }) * mul
+          break
+        case 'hour':
+          c = (hourTagsForFile(a.tags)[0] ?? '').localeCompare(hourTagsForFile(b.tags)[0] ?? '', undefined, { sensitivity: 'base' }) * mul
           break
         case 'duration': c = (a.duration - b.duration) * mul; break
         case 'format': c = a.format.localeCompare(b.format, undefined, { sensitivity: 'base' }) * mul; break
@@ -209,28 +242,37 @@ export function FileList(): JSX.Element {
   const setUnmatchedOnly = useLibraryStore((s) => s.setUnmatchedOnly)
   const [showRemoved, setShowRemoved] = useState(false)
   const [sortState, setSortState] = useState<SortEntry[]>([{ key: 'fileName', dir: 'asc' }])
-  const [colWidths, setColWidths] = useState(readStoredColumnWidths)
-  const colWidthsRef = useRef(colWidths)
-  colWidthsRef.current = colWidths
 
-  const colDragRef = useRef<{ gripIdx: number; startX: number; snapshot: ColumnWidths } | null>(null)
+  const [storedWidths, setStoredWidths] = useState<StoredWidths>(readStoredColumnWidths)
 
   useEffect(() => {
-    localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(colWidths))
-  }, [colWidths])
+    localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(storedWidths))
+  }, [storedWidths])
+
+  const visibleWidthsRef = useRef<ColumnWidths | null>(null)
+  const colDragRef = useRef<{ gripIdx: number; startX: number; snapshot: ColumnWidths } | null>(null)
 
   const beginColResize = useCallback((gripIdx: number, clientX: number) => {
-    colDragRef.current = { gripIdx, startX: clientX, snapshot: { ...colWidthsRef.current } }
+    const cur = visibleWidthsRef.current
+    if (!cur) return
+    colDragRef.current = { gripIdx, startX: clientX, snapshot: { ...cur } }
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
   }, [])
 
   useEffect(() => {
-    function move(e: MouseEvent): void {
+    function move(e: globalThis.MouseEvent): void {
       const drag = colDragRef.current
       if (!drag) return
       const dx = e.clientX - drag.startX
-      setColWidths(applyColumnGrip(drag.gripIdx, drag.snapshot, dx))
+      const next = applyColumnGrip(drag.gripIdx, drag.snapshot, dx)
+      const pair = GRIP_PAIRS[drag.gripIdx]
+      const touchesHour = pair && (pair[0] === 'hour' || pair[1] === 'hour')
+      setStoredWidths((prev) => ({
+        ...prev,
+        ...next,
+        hourUserSet: prev.hourUserSet || !!touchesHour,
+      }))
     }
     function up(): void {
       if (!colDragRef.current) return
@@ -375,14 +417,47 @@ export function FileList(): JSX.Element {
   }
 
   files = sortFiles(files, sortState)
-  const cw = colWidths
   const multiSort = sortState.length > 1
 
-  const minTableWidth = 24 + 13 * GRIP_PX
-    + cw.name + cw.artist + cw.album
+  // Until the user manually drags the hour column, auto-fit it to all chips.
+  let hourAutoFit = COLUMN_MIN.hour
+  if (!storedWidths.hourUserSet) {
+    for (const f of files) {
+      const w = hourCellWidth(hourTagsForFile(f.tags))
+      if (w > hourAutoFit) hourAutoFit = w
+    }
+  }
+
+  const cw: ColumnWidths = {
+    name: storedWidths.name,
+    artist: storedWidths.artist,
+    album: storedWidths.album,
+    hour: storedWidths.hourUserSet ? storedWidths.hour : hourAutoFit,
+    intensity: storedWidths.intensity,
+    affective: storedWidths.affective,
+    activation: storedWidths.activation,
+    spaciousness: storedWidths.spaciousness,
+    tension: storedWidths.tension,
+    energy: storedWidths.energy,
+    valence: storedWidths.valence,
+    danceability: storedWidths.danceability,
+    duration: storedWidths.duration,
+    format: storedWidths.format,
+    size: storedWidths.size,
+  }
+  visibleWidthsRef.current = cw
+
+  const minTableWidth = TABLE_HORIZONTAL_PADDING + 14 * GRIP_PX
+    + cw.name + cw.artist + cw.album + cw.hour
     + cw.intensity + cw.affective + cw.activation + cw.spaciousness
     + cw.tension + cw.energy + cw.valence + cw.danceability
     + cw.duration + cw.format + cw.size
+
+  const gripMouseDown = (gripIdx: number) => (e: React.MouseEvent): void => {
+    e.preventDefault()
+    e.stopPropagation()
+    beginColResize(gripIdx, e.clientX)
+  }
 
   function headerProps(key: SortKey) {
     const idx = sortState.findIndex((e) => e.key === key)
@@ -408,14 +483,6 @@ export function FileList(): JSX.Element {
       },
     }
   }
-
-  const gripMouseDown =
-    (gripIdx: number) =>
-    (e: MouseEvent): void => {
-      e.preventDefault()
-      e.stopPropagation()
-      beginColResize(gripIdx, e.clientX)
-    }
 
   if (showRemoved) {
     const q = query.trim().toLowerCase()
@@ -483,27 +550,29 @@ export function FileList(): JSX.Element {
           <GripSpacer onGripMouseDown={gripMouseDown(1)} />
           <SortHeader label="Album" {...headerProps('album')} className="shrink-0 justify-start text-left min-w-0 py-1.5" style={{ width: cw.album }} />
           <GripSpacer onGripMouseDown={gripMouseDown(2)} />
-          <SortHeader label="Intensity" {...headerProps('intensity')} className="shrink-0 justify-end py-1.5" style={{ width: cw.intensity }} />
+          <SortHeader label="Hour" {...headerProps('hour')} className="shrink-0 justify-start text-left min-w-0 py-1.5" style={{ width: cw.hour }} />
           <GripSpacer onGripMouseDown={gripMouseDown(3)} />
-          <SortHeader label="Affect" {...headerProps('affective')} className="shrink-0 justify-end py-1.5" style={{ width: cw.affective }} />
+          <SortHeader label="Intensity" {...headerProps('intensity')} className="shrink-0 text-left py-1.5" style={{ width: cw.intensity }} />
           <GripSpacer onGripMouseDown={gripMouseDown(4)} />
-          <SortHeader label="Activation" {...headerProps('activation')} className="shrink-0 justify-end py-1.5" style={{ width: cw.activation }} />
+          <SortHeader label="Affective" {...headerProps('affective')} className="shrink-0 text-left py-1.5" style={{ width: cw.affective }} />
           <GripSpacer onGripMouseDown={gripMouseDown(5)} />
-          <SortHeader label="Spaciousness" {...headerProps('spaciousness')} className="shrink-0 justify-end py-1.5" style={{ width: cw.spaciousness }} />
+          <SortHeader label="Activation" {...headerProps('activation')} className="shrink-0 text-left py-1.5" style={{ width: cw.activation }} />
           <GripSpacer onGripMouseDown={gripMouseDown(6)} />
-          <SortHeader label="Tension" {...headerProps('tension')} className="shrink-0 justify-end py-1.5" style={{ width: cw.tension }} />
+          <SortHeader label="Spaciousness" {...headerProps('spaciousness')} className="shrink-0 text-left py-1.5" style={{ width: cw.spaciousness }} />
           <GripSpacer onGripMouseDown={gripMouseDown(7)} />
-          <SortHeader label="Energy" {...headerProps('energy')} className="shrink-0 justify-end py-1.5" style={{ width: cw.energy }} />
+          <SortHeader label="Tension" {...headerProps('tension')} className="shrink-0 text-left py-1.5" style={{ width: cw.tension }} />
           <GripSpacer onGripMouseDown={gripMouseDown(8)} />
-          <SortHeader label="Valence" {...headerProps('valence')} className="shrink-0 justify-end py-1.5" style={{ width: cw.valence }} />
+          <SortHeader label="Energy" {...headerProps('energy')} className="shrink-0 text-left py-1.5" style={{ width: cw.energy }} />
           <GripSpacer onGripMouseDown={gripMouseDown(9)} />
-          <SortHeader label="Dance." {...headerProps('danceability')} className="shrink-0 justify-end py-1.5" style={{ width: cw.danceability }} />
+          <SortHeader label="Valence" {...headerProps('valence')} className="shrink-0 text-left py-1.5" style={{ width: cw.valence }} />
           <GripSpacer onGripMouseDown={gripMouseDown(10)} />
-          <SortHeader label="Duration" {...headerProps('duration')} className="shrink-0 justify-end py-1.5" style={{ width: cw.duration }} />
+          <SortHeader label="Danceability" {...headerProps('danceability')} className="shrink-0 text-left py-1.5" style={{ width: cw.danceability }} />
           <GripSpacer onGripMouseDown={gripMouseDown(11)} />
-          <SortHeader label="Format" {...headerProps('format')} className="shrink-0 justify-end py-1.5" style={{ width: cw.format }} />
+          <SortHeader label="Duration" {...headerProps('duration')} className="shrink-0 text-left py-1.5" style={{ width: cw.duration }} />
           <GripSpacer onGripMouseDown={gripMouseDown(12)} />
-          <SortHeader label="Size" {...headerProps('fileSize')} className="shrink-0 justify-end py-1.5" style={{ width: cw.size }} />
+          <SortHeader label="Format" {...headerProps('format')} className="shrink-0 text-left py-1.5" style={{ width: cw.format }} />
+          <GripSpacer onGripMouseDown={gripMouseDown(13)} />
+          <SortHeader label="Size" {...headerProps('fileSize')} className="shrink-0 text-left py-1.5" style={{ width: cw.size }} />
         </div>
 
         {files.length === 0 ? (
@@ -576,7 +645,7 @@ export function FileList(): JSX.Element {
                     .filter(Boolean)
                     .join('\n')}
                 >
-                  <div className="flex items-center gap-2 shrink-0 min-w-0 overflow-hidden" style={{ width: cw.name }}>
+                  <div className="flex overflow-hidden gap-2 items-center min-w-0 shrink-0" style={{ width: cw.name }}>
                     <button
                       type="button"
                       onClick={(e: React.MouseEvent) => {
@@ -608,17 +677,6 @@ export function FileList(): JSX.Element {
                     <span className="text-[11px] truncate min-w-0 flex-1" title={file.trackTitle ? file.fileName : undefined}>
                       {file.trackTitle || file.fileName}
                     </span>
-                    {(() => {
-                      const dots = file.tags.map(phaseColorForTag).filter(Boolean) as string[]
-                      if (dots.length === 0) return null
-                      return (
-                        <span className="flex items-center gap-0.5 shrink-0">
-                          {dots.map((color, i) => (
-                            <span key={i} className="rounded-full shrink-0" style={{ width: 4, height: 4, backgroundColor: color }} />
-                          ))}
-                        </span>
-                      )
-                    })()}
                     {pendingMatches[file.id] && (
                       <button
                         type="button"
@@ -662,31 +720,47 @@ export function FileList(): JSX.Element {
                     )
                   })()}
                   <GripSpacer />
-                  <span className="text-[11px] text-right shrink-0 tabular-nums text-gray-500" style={{ width: cw.intensity }}>{formatAf(file.audioFeatures?.intensity)}</span>
+                  <div className="hour-cell flex items-center gap-1 shrink-0 overflow-x-auto overflow-y-hidden px-1" style={{ width: cw.hour, minWidth: 0 }}>
+                    {hourTagsForFile(file.tags).map((tag) => {
+                      const color = phaseColorForTag(tag) ?? '#4b5563'
+                      return (
+                        <span
+                          key={tag}
+                          className="shrink-0 rounded px-1 py-px text-[9px] font-medium leading-tight whitespace-nowrap"
+                          style={{ backgroundColor: color + '28', color, border: `1px solid ${color}55` }}
+                          title={tag}
+                        >
+                          {tag}
+                        </span>
+                      )
+                    })}
+                  </div>
                   <GripSpacer />
-                  <span className="text-[11px] text-right shrink-0 tabular-nums text-gray-500" style={{ width: cw.affective }}>{formatAf(file.audioFeatures?.affective_intensity)}</span>
+                  <span className="text-[11px] text-left shrink-0 tabular-nums text-gray-500" style={{ width: cw.intensity }}>{formatAf(file.audioFeatures?.intensity)}</span>
                   <GripSpacer />
-                  <span className="text-[11px] text-right shrink-0 tabular-nums text-gray-500" style={{ width: cw.activation }}>{formatAf(file.audioFeatures?.activation_intensity)}</span>
+                  <span className="text-[11px] text-left shrink-0 tabular-nums text-gray-500" style={{ width: cw.affective }}>{formatAf(file.audioFeatures?.affective_intensity)}</span>
                   <GripSpacer />
-                  <span className="text-[11px] text-right shrink-0 tabular-nums text-gray-500" style={{ width: cw.spaciousness }}>{formatAf(file.audioFeatures?.spaciousness)}</span>
+                  <span className="text-[11px] text-left shrink-0 tabular-nums text-gray-500" style={{ width: cw.activation }}>{formatAf(file.audioFeatures?.activation_intensity)}</span>
                   <GripSpacer />
-                  <span className="text-[11px] text-right shrink-0 tabular-nums text-gray-500" style={{ width: cw.tension }}>{formatAf(file.audioFeatures?.tension)}</span>
+                  <span className="text-[11px] text-left shrink-0 tabular-nums text-gray-500" style={{ width: cw.spaciousness }}>{formatAf(file.audioFeatures?.spaciousness)}</span>
                   <GripSpacer />
-                  <span className="text-[11px] text-right shrink-0 tabular-nums text-gray-500" style={{ width: cw.energy }}>{formatAf(file.audioFeatures?.energy)}</span>
+                  <span className="text-[11px] text-left shrink-0 tabular-nums text-gray-500" style={{ width: cw.tension }}>{formatAf(file.audioFeatures?.tension)}</span>
                   <GripSpacer />
-                  <span className="text-[11px] text-right shrink-0 tabular-nums text-gray-500" style={{ width: cw.valence }}>{formatAf(file.audioFeatures?.valence)}</span>
+                  <span className="text-[11px] text-left shrink-0 tabular-nums text-gray-500" style={{ width: cw.energy }}>{formatAf(file.audioFeatures?.energy)}</span>
                   <GripSpacer />
-                  <span className="text-[11px] text-right shrink-0 tabular-nums text-gray-500" style={{ width: cw.danceability }}>{formatAf(file.audioFeatures?.danceability)}</span>
+                  <span className="text-[11px] text-left shrink-0 tabular-nums text-gray-500" style={{ width: cw.valence }}>{formatAf(file.audioFeatures?.valence)}</span>
                   <GripSpacer />
-                  <span className="text-[11px] text-right shrink-0 tabular-nums" style={{ width: cw.duration }}>
+                  <span className="text-[11px] text-left shrink-0 tabular-nums text-gray-500" style={{ width: cw.danceability }}>{formatAf(file.audioFeatures?.danceability)}</span>
+                  <GripSpacer />
+                  <span className="text-[11px] text-left shrink-0 tabular-nums" style={{ width: cw.duration }}>
                     {formatDuration(file.duration)}
                   </span>
                   <GripSpacer />
-                  <span className="text-[10px] text-right shrink-0 uppercase text-gray-600" style={{ width: cw.format }}>
+                  <span className="text-[10px] text-left shrink-0 uppercase text-gray-600" style={{ width: cw.format }}>
                     {file.format}
                   </span>
                   <GripSpacer />
-                  <span className="text-[11px] text-right shrink-0 tabular-nums text-gray-600" style={{ width: cw.size }}>
+                  <span className="text-[11px] text-left shrink-0 tabular-nums text-gray-600" style={{ width: cw.size }}>
                     {formatSize(file.fileSize)}
                   </span>
                 </div>
@@ -727,6 +801,8 @@ export function FileList(): JSX.Element {
                 </span>
                 <GripSpacer />
                 <span className="min-w-0 shrink-0" style={{ width: cw.album }} />
+                <GripSpacer />
+                <span className="shrink-0" style={{ width: cw.hour }} />
                 <GripSpacer />
                 <span className="shrink-0" style={{ width: cw.intensity }} />
                 <GripSpacer />
@@ -835,7 +911,7 @@ export function FileList(): JSX.Element {
 function GripSpacer({
   onGripMouseDown,
 }: {
-  onGripMouseDown?: (e: MouseEvent) => void
+  onGripMouseDown?: (e: React.MouseEvent) => void
 }): JSX.Element {
   const interactive = onGripMouseDown !== undefined
   return (

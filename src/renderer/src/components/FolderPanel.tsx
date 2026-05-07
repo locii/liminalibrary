@@ -61,7 +61,6 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
   const selectedTags = useLibraryStore((s) => s.selectedTags)
   const selectedPlaylistId = useLibraryStore((s) => s.selectedPlaylistId)
   const selectFolder = useLibraryStore((s) => s.selectFolder)
-  const selectTag = useLibraryStore((s) => s.selectTag)
   const toggleSelectedTag = useLibraryStore((s) => s.toggleSelectedTag)
   const clearSelectedTags = useLibraryStore((s) => s.clearSelectedTags)
   const removeWatchedFolder = useLibraryStore((s) => s.removeWatchedFolder)
@@ -300,7 +299,7 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
                 key={tag}
                 type="button"
                 aria-pressed={isOn}
-                onClick={(e) => e.shiftKey ? toggleSelectedTag(tag) : selectTag(tag)}
+                onClick={() => toggleSelectedTag(tag)}
                 className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors ${
                   isOn
                     ? 'text-gray-200 bg-accent/15'
