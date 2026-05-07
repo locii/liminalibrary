@@ -534,6 +534,7 @@ export function PropertiesPanel(): JSX.Element {
 
           {/* Current file */}
           <DupeRow
+            id={file.id}
             fileName={file.fileName}
             folderPath={file.folderPath}
             format={file.format}
@@ -546,6 +547,7 @@ export function PropertiesPanel(): JSX.Element {
           {duplicates.map((d) => (
             <DupeRow
               key={d.id}
+              id={d.id}
               fileName={d.fileName}
               folderPath={d.folderPath}
               format={d.format}
@@ -611,8 +613,9 @@ export function PropertiesPanel(): JSX.Element {
 }
 
 function DupeRow({
-  fileName, folderPath, format, sampleRate, fileSize, isCurrent, onPrefer, onUnlink, onRemove,
+  id, fileName, folderPath, format, sampleRate, fileSize, isCurrent, onPrefer, onUnlink, onRemove,
 }: {
+  id: string
   fileName: string
   folderPath: string
   format: string
@@ -623,9 +626,38 @@ function DupeRow({
   onUnlink?: () => void
   onRemove?: () => void
 }): JSX.Element {
+  const previewFileId = useLibraryStore((s) => s.previewFileId)
+  const setPreview = useLibraryStore((s) => s.setPreview)
+  const isPlaying = previewFileId === id
+
   return (
     <div className={`flex flex-col gap-1 px-2 py-1.5 rounded border ${isCurrent ? 'border-accent/30 bg-accent/8' : 'border-surface-border bg-surface-hover'}`}>
       <div className="flex items-center gap-1.5 min-w-0">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            if (isPlaying) setPreview(null, [])
+            else setPreview(id, [id])
+          }}
+          className={`shrink-0 w-4 h-4 flex items-center justify-center rounded-full border transition-colors ${
+            isPlaying
+              ? 'border-accent text-accent'
+              : 'border-gray-600 text-gray-600 hover:border-accent hover:text-accent'
+          }`}
+          title={isPlaying ? 'Stop preview' : 'Preview'}
+        >
+          {isPlaying ? (
+            <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
+              <rect x="1.5" y="1" width="2.5" height="8" rx="0.5" />
+              <rect x="6" y="1" width="2.5" height="8" rx="0.5" />
+            </svg>
+          ) : (
+            <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
+              <path d="M2 1.5l7 3.5-7 3.5V1.5z" />
+            </svg>
+          )}
+        </button>
         {isCurrent && <span className="text-[9px] text-accent uppercase tracking-wider shrink-0">current</span>}
         <span className="text-[11px] text-gray-200 truncate flex-1 min-w-0">{fileName}</span>
       </div>
