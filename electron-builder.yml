@@ -2,6 +2,8 @@ appId: com.limina.library
 productName: Limina Library
 copyright: Copyright © 2025 Limina Library
 
+afterSign: build/notarize.js
+
 publish:
   provider: github
   owner: locii
@@ -29,6 +31,9 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  # Notarization runs in build/notarize.js (afterSign hook) — the built-in
+  # 24.13.x path is broken (calls legacy API with undefined options).
+  notarize: false
   # Both targets ship: dmg for first-time install, zip for electron-updater
   # (Squirrel.Mac applies updates from a zipped .app, not from a dmg).
   target:
