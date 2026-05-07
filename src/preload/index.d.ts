@@ -65,6 +65,12 @@ export interface LibraryAPI {
   // Limina Studio
   studioSaveSession: (json: string, defaultName: string) => Promise<string | null>
   studioOpenFile: (filePath: string) => Promise<void>
+
+  // Auto-updater
+  quitAndInstall: () => void
+  simulateUpdate: () => void
+  onUpdateDownloading: (callback: (percent: number) => void) => () => void
+  onUpdateDownloaded: (callback: (version: string) => void) => () => void
 }
 
 declare global {

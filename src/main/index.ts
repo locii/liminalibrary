@@ -17,13 +17,24 @@ import { registerStudioHandlers } from './ipc/studioHandlers'
 function initAutoUpdater(): void {
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
-  autoUpdater.on('update-downloaded', (info) => {
-    new Notification({
-      title: 'Limina Library update ready',
-      body: `v${info.version} downloaded — will install on next launch`,
-    }).show()
+  autoUpdater.on('checking-for-update', () => console.log('[updater] checking'))
+  autoUpdater.on('update-not-available', () => console.log('[updater] up to date'))
+  autoUpdater.on('error', (e) => console.log('[updater] error', e.message))
+  autoUpdater.on('update-available', (info) => {
+    console.log('[updater] update available', info.version)
+    mainWindow?.webContents.send('updater:downloading', 0)
   })
-  setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 10_000)
+  autoUpdater.on('download-progress', (p) => {
+    const pct = Math.round(p.percent)
+    console.log('[updater] progress', pct + '%')
+    mainWindow?.webContents.send('updater:downloading', pct)
+  })
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('[updater] downloaded', info.version)
+    mainWindow?.webContents.send('updater:downloaded', info.version)
+  })
+  ipcMain.on('updater:quitAndInstall', () => autoUpdater.quitAndInstall())
+  setTimeout(() => autoUpdater.checkForUpdates().catch((e) => console.log('[updater] check failed', e.message)), 10_000)
   setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 4 * 60 * 60 * 1_000)
 }
 
@@ -127,6 +138,20 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.limina.library')
 
   if (!is.dev) initAutoUpdater()
+
+  if (is.dev) {
+    ipcMain.on('updater:simulate', () => {
+      let pct = 0
+      const tick = setInterval(() => {
+        pct = Math.min(100, pct + 10)
+        mainWindow?.webContents.send('updater:downloading', pct)
+        if (pct >= 100) {
+          clearInterval(tick)
+          setTimeout(() => mainWindow?.webContents.send('updater:downloaded', '9.9.9'), 300)
+        }
+      }, 300)
+    })
+  }
 
   startAudioServer()
   ipcMain.handle('audio:getServerPort', () => audioServerPort)

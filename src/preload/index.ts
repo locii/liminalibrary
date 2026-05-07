@@ -38,6 +38,20 @@ const api: LibraryAPI = {
 
   studioSaveSession: (json, defaultName) => ipcRenderer.invoke('studio:saveSession', json, defaultName),
   studioOpenFile: (filePath) => ipcRenderer.invoke('studio:openFile', filePath),
+
+  // Auto-updater
+  quitAndInstall: () => ipcRenderer.send('updater:quitAndInstall'),
+  simulateUpdate: () => ipcRenderer.send('updater:simulate'),
+  onUpdateDownloading: (callback) => {
+    const handler = (_: unknown, percent: number): void => callback(percent)
+    ipcRenderer.on('updater:downloading', handler)
+    return () => ipcRenderer.removeListener('updater:downloading', handler)
+  },
+  onUpdateDownloaded: (callback) => {
+    const handler = (_: unknown, version: string): void => callback(version)
+    ipcRenderer.on('updater:downloaded', handler)
+    return () => ipcRenderer.removeListener('updater:downloaded', handler)
+  },
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useLibraryStore } from '../store/libraryStore'
+import { useUpdaterStore } from '../store/updaterStore'
 
 const WAVEFORM_COLORS: [string, string][] = [
   ['#6366f1', '#818cf8'],
@@ -26,6 +27,7 @@ function formatTime(s: number): string {
 }
 
 export function PlayerBar(): JSX.Element | null {
+  const { downloading, downloadPercent, readyVersion } = useUpdaterStore()
   const previewFileId = useLibraryStore((s) => s.previewFileId)
   const previewQueue = useLibraryStore((s) => s.previewQueue)
   const setPreview = useLibraryStore((s) => s.setPreview)
@@ -200,7 +202,37 @@ export function PlayerBar(): JSX.Element | null {
     setPreview(null, [])
   }, [setPreview])
 
-  if (!file) return null
+  const updateBadge = (
+    <span className="flex items-center gap-1.5 text-[10px] text-gray-700 select-none tabular-nums shrink-0">
+      {readyVersion ? (
+        <button
+          onClick={() => window.electronAPI.quitAndInstall()}
+          className="text-indigo-400 hover:text-indigo-300 cursor-pointer underline underline-offset-2"
+        >
+          Update ready — restart to install
+        </button>
+      ) : downloading ? (
+        <>
+          <svg className="animate-spin h-2.5 w-2.5 text-indigo-500 shrink-0" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+          </svg>
+          <span className="text-indigo-500">
+            Downloading update{downloadPercent > 0 ? ` ${downloadPercent}%` : '…'}
+          </span>
+        </>
+      ) : null}
+      <span>v{__APP_VERSION__}</span>
+    </span>
+  )
+
+  if (!file) {
+    return (
+      <div className="flex items-center justify-end px-4 h-10 border-t shrink-0 border-surface-border bg-surface-panel">
+        {updateBadge}
+      </div>
+    )
+  }
 
   const queueIdx = previewQueue.indexOf(file.id)
   const hasPrev = queueIdx > 0
@@ -284,6 +316,9 @@ export function PlayerBar(): JSX.Element | null {
         <span className="mx-0.5 text-gray-700">/</span>
         {formatTime(file.duration)}
       </span>
+
+      {/* Update status + version */}
+      {updateBadge}
 
       {/* Close */}
       <button

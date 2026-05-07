@@ -13,9 +13,20 @@ import { PlayerBar } from './components/PlayerBar'
 import { SettingsPanel } from './components/SettingsPanel'
 import { loadSettings, saveSettings, applySettings } from './lib/settings'
 import type { AppSettings } from './lib/settings'
+import { useUpdaterStore } from './store/updaterStore'
 
 
 export default function App(): JSX.Element {
+  const { setDownloading, setReady } = useUpdaterStore()
+
+  useEffect(() => {
+    return window.electronAPI.onUpdateDownloading((percent) => setDownloading(percent))
+  }, [setDownloading])
+
+  useEffect(() => {
+    return window.electronAPI.onUpdateDownloaded((version) => setReady(version))
+  }, [setReady])
+
   const watchedFolders = useLibraryStore((s) => s.watchedFolders)
   const selectedFileId = useLibraryStore((s) => s.selectedFileId)
   const selectedMissingTrackId = useLibraryStore((s) => s.selectedMissingTrackId)
