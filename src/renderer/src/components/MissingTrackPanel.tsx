@@ -4,7 +4,6 @@ import { mfbTrackUrl } from '../types'
 import type { BreathworkPhase, LibraryFile, MfbAudioFeatures } from '../types'
 
 export function MissingTrackPanel(): JSX.Element {
-  const playlists = useLibraryStore((s) => s.playlists)
   const selectedMissingTrackId = useLibraryStore((s) => s.selectedMissingTrackId)
   const selectMissingTrack = useLibraryStore((s) => s.selectMissingTrack)
   const allFiles = useLibraryStore((s) => s.files)
@@ -14,9 +13,8 @@ export function MissingTrackPanel(): JSX.Element {
   const [query, setQuery] = useState(() => {
     const id = useLibraryStore.getState().selectedMissingTrackId
     if (id === null) return ''
-    const track = useLibraryStore.getState().playlists
-      .flatMap((p) => p.tracks)
-      .find((t) => t.id === id)
+    const detail = useLibraryStore.getState().selectedPlaylistDetail
+    const track = detail?.segments.flatMap((s) => s.tracks).find((t) => t.id === id)
     return track?.title ?? ''
   })
   const addFiles = useLibraryStore((s) => s.addFiles)
@@ -25,14 +23,16 @@ export function MissingTrackPanel(): JSX.Element {
   const [pickedDiskPath, setPickedDiskPath] = useState<string | null>(null)
   const [applying, setApplying] = useState(false)
   const [done, setDone] = useState(false)
+  const [applyError, setApplyError] = useState('')
   const [searching, setSearching] = useState(false)
   const [diskResults, setDiskResults] = useState<string[]>([])
   const [diskSearched, setDiskSearched] = useState(false)
   const [addingFolder, setAddingFolder] = useState(false)
   const [folderAdded, setFolderAdded] = useState(false)
 
+  const selectedPlaylistDetail = useLibraryStore((s) => s.selectedPlaylistDetail)
   const track = selectedMissingTrackId !== null
-    ? playlists.flatMap((p) => p.tracks).find((t) => t.id === selectedMissingTrackId) ?? null
+    ? selectedPlaylistDetail?.segments.flatMap((s) => s.tracks).find((t) => t.id === selectedMissingTrackId) ?? null
     : null
 
   if (!track) return <></>
@@ -87,12 +87,13 @@ export function MissingTrackPanel(): JSX.Element {
     if (!targetId && !diskPath) return
     if (!track) return
     setApplying(true)
+    setApplyError('')
     try {
       // If picked from disk, scan the file and add it to the library first
       let resolvedFileId = targetId
       if (!resolvedFileId && diskPath) {
         const scanned = (await window.electronAPI.scanFile(diskPath)) as LibraryFile | null
-        if (!scanned) return
+        if (!scanned) { setApplyError('Could not read file — check it exists and is accessible.'); return }
         addFiles([scanned])
         resolvedFileId = scanned.id
       }
@@ -120,12 +121,13 @@ export function MissingTrackPanel(): JSX.Element {
         mfbApplied: true,
         appliedPathGuess: true,
         audioFeatures: data.audio_features ?? null,
+        bandcampUrl: (data as { bandcamp_url?: string }).bandcamp_url ?? null,
+        beatportUrl: (data as { beatport_url?: string }).beatport_url ?? null,
         ...(hourSlug ? { breathworkPhase: hourSlug as BreathworkPhase } : {}),
       })
       setDone(true)
       setTimeout(() => {
         selectFile(resolvedFileId!)
-        selectMissingTrack(null)
       }, 800)
     } catch {
       // ignore — user can retry
@@ -143,7 +145,25 @@ export function MissingTrackPanel(): JSX.Element {
             <p className="text-[11px] text-gray-200 font-medium leading-snug">{track.title}</p>
             <p className="text-[11px] text-gray-500">{track.artist}</p>
           </div>
-          <div className="flex gap-1 shrink-0">
+          <div className="flex gap-1 shrink-0 items-center">
+            {track.bandcamp_url && (
+              <button
+                type="button"
+                onClick={() => window.open(track.bandcamp_url!)}
+                className="px-2.5 py-1 text-[10px] font-medium rounded border transition-colors text-[#1da0c3] border-[#1da0c3]/40 bg-[#1da0c3]/10 hover:bg-[#1da0c3]/20"
+              >
+                Buy on Bandcamp
+              </button>
+            )}
+            {track.beatport_url && (
+              <button
+                type="button"
+                onClick={() => window.open(track.beatport_url!)}
+                className="px-2.5 py-1 text-[10px] font-medium rounded border transition-colors text-[#97f04f] border-[#97f04f]/40 bg-[#97f04f]/10 hover:bg-[#97f04f]/20"
+              >
+                Buy on Beatport
+              </button>
+            )}
             <button
               type="button"
               onClick={() => window.open(mfbTrackUrl(track.id, track.title))}
@@ -221,25 +241,12 @@ export function MissingTrackPanel(): JSX.Element {
             <p className="px-3 py-3 text-[11px] text-gray-500">{q ? 'No results' : 'No files in library'}</p>
           ) : (
             filteredFiles.map((file) => (
-              <button
+              <LibraryFileRow
                 key={file.id}
-                type="button"
-                onClick={() => { setPickedFileId(file.id === pickedFileId ? null : file.id); setPickedDiskPath(null) }}
-                className={`w-full text-left flex flex-col px-3 py-2 border-b border-surface-border/50 transition-colors ${
-                  pickedFileId === file.id
-                    ? 'bg-accent/15'
-                    : 'hover:bg-surface-hover'
-                }`}
-              >
-                <span className={`text-[11px] truncate ${pickedFileId === file.id ? 'text-gray-200' : 'text-gray-400'}`}>
-                  {file.trackTitle || file.fileName}
-                </span>
-                {(file.artist || file.artistPathGuess) && (
-                  <span className="text-[10px] text-gray-600 truncate">
-                    {file.artist || file.artistPathGuess}
-                  </span>
-                )}
-              </button>
+                file={file}
+                picked={pickedFileId === file.id}
+                onPick={() => { setPickedFileId(file.id === pickedFileId ? null : file.id); setPickedDiskPath(null) }}
+              />
             ))
           )}
 
@@ -247,21 +254,14 @@ export function MissingTrackPanel(): JSX.Element {
           {diskResults.length > 0 && (
             <>
               <p className="px-3 pt-2 pb-1 text-[9px] text-gray-600 uppercase tracking-wider">Found on disk</p>
-              {diskResults.map((p) => {
-                const fileName = p.split(/[\\/]/).pop() ?? p
-                const picked = pickedDiskPath === p
-                return (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => { setPickedDiskPath(picked ? null : p); setPickedFileId(null) }}
-                    className={`w-full text-left flex flex-col px-3 py-2 border-b border-surface-border/50 transition-colors ${picked ? 'bg-accent/15' : 'hover:bg-surface-hover'}`}
-                  >
-                    <span className={`text-[11px] truncate ${picked ? 'text-gray-200' : 'text-gray-400'}`}>{fileName}</span>
-                    <span className="text-[10px] text-gray-600 truncate" title={p}>{p}</span>
-                  </button>
-                )
-              })}
+              {diskResults.map((p) => (
+                <DiskFileRow
+                  key={p}
+                  path={p}
+                  picked={pickedDiskPath === p}
+                  onPick={() => { setPickedDiskPath(pickedDiskPath === p ? null : p); setPickedFileId(null) }}
+                />
+              ))}
             </>
           )}
           {diskSearched && diskResults.length === 0 && (
@@ -311,6 +311,9 @@ export function MissingTrackPanel(): JSX.Element {
             </button>
           )
         })()}
+        {applyError && (
+          <p className="text-[10px] text-red-400 leading-snug">{applyError}</p>
+        )}
         {done ? (
           <p className="text-center text-[11px] text-accent">Matched!</p>
         ) : (
@@ -325,5 +328,74 @@ export function MissingTrackPanel(): JSX.Element {
         )}
       </div>
     </div>
+  )
+}
+
+function formatSize(bytes: number): string {
+  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`
+  return `${(bytes / 1_000).toFixed(0)} KB`
+}
+
+function LibraryFileRow({ file, picked, onPick }: { file: LibraryFile; picked: boolean; onPick: () => void }): JSX.Element {
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null)
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      className={`w-full text-left flex flex-col px-3 py-2 border-b border-surface-border/50 transition-colors ${picked ? 'bg-accent/15' : 'hover:bg-surface-hover'}`}
+    >
+      <div
+        className="flex items-center min-w-0"
+        onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setTooltipPos({ x: r.left, y: r.top }) }}
+        onMouseLeave={() => setTooltipPos(null)}
+      >
+        <span className={`text-[11px] truncate flex-1 min-w-0 ${picked ? 'text-gray-200' : 'text-gray-400'}`}>
+          {file.trackTitle || file.fileName}
+        </span>
+        {tooltipPos && (
+          <div
+            className="fixed z-[999] bg-black rounded p-2 text-[10px] text-gray-200 shadow-lg pointer-events-none border border-white/10 max-w-xs"
+            style={{ left: tooltipPos.x, top: tooltipPos.y - 8, transform: 'translateY(-100%)' }}
+          >
+            <div className="font-medium break-all">{file.fileName}</div>
+            <div className="text-gray-400 mt-0.5 break-all">{file.folderPath}</div>
+            <div className="text-gray-500 mt-0.5 uppercase">{file.format} · {(file.sampleRate / 1000).toFixed(0)} kHz · {formatSize(file.fileSize)}</div>
+          </div>
+        )}
+      </div>
+      {(file.artist || file.artistPathGuess) && (
+        <span className="text-[10px] text-gray-600 truncate">{file.artist || file.artistPathGuess}</span>
+      )}
+    </button>
+  )
+}
+
+function DiskFileRow({ path, picked, onPick }: { path: string; picked: boolean; onPick: () => void }): JSX.Element {
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null)
+  const fileName = path.split(/[\\/]/).pop() ?? path
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      className={`w-full text-left flex flex-col px-3 py-2 border-b border-surface-border/50 transition-colors ${picked ? 'bg-accent/15' : 'hover:bg-surface-hover'}`}
+    >
+      <div
+        className="flex items-center min-w-0"
+        onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setTooltipPos({ x: r.left, y: r.top }) }}
+        onMouseLeave={() => setTooltipPos(null)}
+      >
+        <span className={`text-[11px] truncate flex-1 min-w-0 ${picked ? 'text-gray-200' : 'text-gray-400'}`}>{fileName}</span>
+        {tooltipPos && (
+          <div
+            className="fixed z-[999] bg-black rounded p-2 text-[10px] text-gray-200 shadow-lg pointer-events-none border border-white/10 max-w-xs"
+            style={{ left: tooltipPos.x, top: tooltipPos.y - 8, transform: 'translateY(-100%)' }}
+          >
+            <div className="font-medium break-all">{fileName}</div>
+            <div className="text-gray-400 mt-0.5 break-all">{path}</div>
+          </div>
+        )}
+      </div>
+      <span className="text-[10px] text-gray-600 truncate">{path}</span>
+    </button>
   )
 }

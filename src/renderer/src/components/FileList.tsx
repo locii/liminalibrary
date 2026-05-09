@@ -290,6 +290,9 @@ export function FileList(): JSX.Element {
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [multiSelectedIds, setMultiSelectedIds] = useState<Set<string>>(new Set())
+  const [rowTooltip, setRowTooltip] = useState<{ file: LibraryFile; x: number; y: number } | null>(null)
+  const rowTooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const rowTooltipCursorRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const lastClickedIdRef = useRef<string | null>(null)
   const previewFileId = useLibraryStore((s) => s.previewFileId)
   const setPreview = useLibraryStore((s) => s.setPreview)
@@ -366,12 +369,11 @@ export function FileList(): JSX.Element {
   })()
 
   // Compute playlist missing tracks (before filtering modifies `files`)
+  const selectedPlaylistDetail = useLibraryStore((s) => s.selectedPlaylistDetail)
   const missingPlaylistTracks: MfbPlaylistTrack[] = (() => {
-    if (selectedPlaylistId === null) return []
-    const playlist = playlists.find((p) => p.id === selectedPlaylistId)
-    if (!playlist) return []
+    if (selectedPlaylistId === null || !selectedPlaylistDetail) return []
     const libraryIds = new Set(allFiles.map((f) => f.mfbTrackId).filter((id): id is number => id !== null))
-    return playlist.tracks.filter((t) => !libraryIds.has(t.id))
+    return selectedPlaylistDetail.segments.flatMap((s) => s.tracks).filter((t) => !libraryIds.has(t.id))
   })()
 
   // Apply folder, tag, or playlist filter
@@ -629,21 +631,21 @@ export function FileList(): JSX.Element {
                         ? 'bg-accent/15 text-gray-200'
                         : 'hover:bg-surface-hover text-gray-400'
                   }`}
-                  title={[
-                    file.filePath,
-                    hasPendingPathGuess(file)
-                      ? `Folder guess (pending): ${[file.artistPathGuess, file.albumPathGuess].filter(Boolean).join(' — ')}`
-                      : '',
-                    file.artist.trim() || file.album.trim()
-                      ? `Tags/file: ${[file.artist.trim() || '—', file.album.trim() || '—'].join(' — ')}`
-                      : '',
-                    hasPendingPathGuess(file)
-                      ? 'Apply folder names in the track panel to confirm.'
-                      : '',
-                    'Drag to Limina Studio',
-                  ]
-                    .filter(Boolean)
-                    .join('\n')}
+                  onMouseEnter={(e) => {
+                    rowTooltipCursorRef.current = { x: e.clientX, y: e.clientY }
+                    if (rowTooltipTimerRef.current) clearTimeout(rowTooltipTimerRef.current)
+                    rowTooltipTimerRef.current = setTimeout(() => {
+                      const { x, y } = rowTooltipCursorRef.current
+                      setRowTooltip({ file, x, y })
+                    }, 1000)
+                  }}
+                  onMouseMove={(e) => {
+                    rowTooltipCursorRef.current = { x: e.clientX, y: e.clientY }
+                  }}
+                  onMouseLeave={() => {
+                    if (rowTooltipTimerRef.current) clearTimeout(rowTooltipTimerRef.current)
+                    setRowTooltip(null)
+                  }}
                 >
                   <div className="flex overflow-hidden gap-2 items-center min-w-0 shrink-0" style={{ width: cw.name }}>
                     <button
@@ -674,9 +676,29 @@ export function FileList(): JSX.Element {
                         </svg>
                       )}
                     </button>
-                    <span className="text-[11px] truncate min-w-0 flex-1" title={file.trackTitle ? file.fileName : undefined}>
-                      {file.trackTitle || file.fileName}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-hidden">
+                      <span className="text-[11px] truncate shrink min-w-0">
+                        {file.trackTitle || file.fileName}
+                      </span>
+                      {file.bandcampUrl && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); window.open(file.bandcampUrl!) }}
+                          className="shrink-0 inline-flex items-center px-1.5 py-px text-[9px] font-medium rounded border transition-colors text-[#1da0c3] border-[#1da0c3]/40 bg-[#1da0c3]/10 hover:bg-[#1da0c3]/20 leading-tight"
+                        >
+                          Buy at Bandcamp
+                        </button>
+                      )}
+                      {file.beatportUrl && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); window.open(file.beatportUrl!) }}
+                          className="shrink-0 inline-flex items-center px-1.5 py-px text-[9px] font-medium rounded border transition-colors text-[#97f04f] border-[#97f04f]/40 bg-[#97f04f]/10 hover:bg-[#97f04f]/20 leading-tight"
+                        >
+                          Buy at Beatport
+                        </button>
+                      )}
+                    </div>
                     {pendingMatches[file.id] && (
                       <button
                         type="button"
@@ -704,7 +726,6 @@ export function FileList(): JSX.Element {
                         <span
                           className={`text-[11px] truncate shrink-0 min-w-0 ${pm ? 'italic text-accent' : `text-gray-400 ${artistGuessPendingItalic(file) ? 'italic' : ''}`}`}
                           style={{ width: cw.artist }}
-                          title={pm ? `Suggested: ${suggestedArtist}` : ([displayedArtist(file), file.artist && file.artist !== displayedArtist(file) ? `Embedded: ${file.artist}` : ''].filter(Boolean).join(' · ') || undefined)}
                         >
                           {pm ? suggestedArtist : displayedArtist(file)}
                         </span>
@@ -712,7 +733,6 @@ export function FileList(): JSX.Element {
                         <span
                           className={`text-[11px] truncate shrink-0 min-w-0 ${pm ? 'italic text-accent' : `text-gray-400 ${albumGuessPendingItalic(file) ? 'italic' : ''}`}`}
                           style={{ width: cw.album }}
-                          title={pm ? `Suggested: ${suggestedAlbum}` : ([displayedAlbum(file), file.album && file.album !== displayedAlbum(file) ? `Embedded: ${file.album}` : ''].filter(Boolean).join(' · ') || undefined)}
                         >
                           {pm ? suggestedAlbum : displayedAlbum(file)}
                         </span>
@@ -720,15 +740,14 @@ export function FileList(): JSX.Element {
                     )
                   })()}
                   <GripSpacer />
-                  <div className="hour-cell flex items-center gap-1 shrink-0 overflow-x-auto overflow-y-hidden px-1" style={{ width: cw.hour, minWidth: 0 }}>
+                  <div className="flex overflow-x-auto overflow-y-hidden gap-1 items-center px-1 hour-cell shrink-0" style={{ width: cw.hour, minWidth: 0 }}>
                     {hourTagsForFile(file.tags).map((tag) => {
                       const color = phaseColorForTag(tag) ?? '#4b5563'
                       return (
                         <span
                           key={tag}
-                          className="shrink-0 rounded px-1 py-px text-[9px] font-medium leading-tight whitespace-nowrap"
+                          className="shrink-0 rounded-lg px-1 py-px text-[9px] font-medium leading-tight whitespace-nowrap"
                           style={{ backgroundColor: color + '28', color, border: `1px solid ${color}55` }}
-                          title={tag}
                         >
                           {tag}
                         </span>
@@ -892,6 +911,54 @@ export function FileList(): JSX.Element {
             >
               {isMulti ? `Remove ${multiSelectedIds.size} files from Library` : 'Remove from Library'}
             </button>
+          </div>
+        )
+      })()}
+
+      {/* Row hover tooltip */}
+      {rowTooltip && (() => {
+        const { file: f, x, y } = rowTooltip
+        const hourTags = hourTagsForFile(f.tags)
+        const af = f.audioFeatures
+        const afFields: [string, number | null | undefined][] = af ? [
+          ['Intensity', af.intensity],
+          ['Affective', af.affective_intensity],
+          ['Activation', af.activation_intensity],
+          ['Energy', af.energy],
+          ['Valence', af.valence],
+          ['Danceability', af.danceability],
+          ['Spaciousness', af.spaciousness],
+          ['Tension', af.tension],
+          ['Tempo', af.tempo],
+        ] : []
+        return (
+          <div
+            className="fixed z-[999] bg-black rounded p-2 text-[10px] leading-snug border border-white/10 max-w-xs pointer-events-none"
+            style={{ left: x + 12, top: y - 8, transform: 'translateY(-100%)' }}
+          >
+            {f.trackTitle && <div className="font-medium text-gray-100 break-all">{f.trackTitle}</div>}
+            {(f.artist || f.album) && (
+              <div className="text-gray-400 mt-0.5">{[f.artist, f.album].filter(Boolean).join(' — ')}</div>
+            )}
+            {hourTags.length > 0 && (
+              <div className="text-gray-500 mt-0.5">{hourTags.join(', ')}</div>
+            )}
+            <div className="text-gray-500 mt-0.5 break-all">{f.folderPath}</div>
+            {afFields.length > 0 && (
+              <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5">
+                {afFields.map(([label, val]) => (
+                  val != null && Number.isFinite(val) ? (
+                    <div key={label} className="flex gap-1 items-center">
+                      <span className="w-16 text-gray-600 shrink-0">{label}</span>
+                      <div className="overflow-hidden flex-1 h-1 rounded bg-white/10">
+                        <div className="h-full rounded bg-accent/60" style={{ width: `${Math.min(100, Math.max(0, (val as number) * 100))}%` }} />
+                      </div>
+                      <span className="tabular-nums text-gray-500">{(val as number).toFixed(2)}</span>
+                    </div>
+                  ) : null
+                ))}
+              </div>
+            )}
           </div>
         )
       })()}

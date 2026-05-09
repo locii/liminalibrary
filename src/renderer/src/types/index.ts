@@ -9,6 +9,8 @@ export type {
   MfbAudioFeatures,
   MfbPlaylist,
   MfbPlaylistTrack,
+  MfbPlaylistSegment,
+  MfbPlaylistDetail,
 } from '../../../shared/types'
 
 export { BREATHWORK_PHASES, PHASE_COLORS, phaseColorForTag, mfbTrackUrl } from '../../../shared/types'

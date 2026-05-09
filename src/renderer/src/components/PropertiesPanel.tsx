@@ -88,9 +88,13 @@ export function PropertiesPanel(): JSX.Element {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmUnlink, setConfirmUnlink] = useState(false)
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const m4bAudioRef = useRef<HTMLAudioElement | null>(null)
+  const [m4bPreviewPlaying, setM4bPreviewPlaying] = useState(false)
+  const [m4bPreviewLoading, setM4bPreviewLoading] = useState(false)
 
   const file = files.find((f) => f.id === selectedFileId)
   const pendingMatch = file ? pendingMatches[file.id] : undefined
+  const pendingMatchLinkedCount = pendingMatch ? files.filter((f) => f.mfbTrackId === pendingMatch.id).length : 0
   const duplicates = file?.mfbTrackId !== null && file?.mfbTrackId !== undefined
     ? files.filter((f) => f.id !== file.id && f.mfbTrackId === file.mfbTrackId)
     : []
@@ -99,7 +103,34 @@ export function PropertiesPanel(): JSX.Element {
     setConfirmDelete(false)
     setConfirmUnlink(false)
     if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current)
+    m4bAudioRef.current?.pause()
+    m4bAudioRef.current = null
+    setM4bPreviewPlaying(false)
+    setM4bPreviewLoading(false)
   }, [selectedFileId])
+
+  async function toggleM4bPreview(): Promise<void> {
+    if (m4bPreviewPlaying || m4bAudioRef.current) {
+      m4bAudioRef.current?.pause()
+      m4bAudioRef.current = null
+      setM4bPreviewPlaying(false)
+      return
+    }
+    if (m4bPreviewLoading || !pendingMatch) return
+    setM4bPreviewLoading(true)
+    try {
+      const data = await window.electronAPI.mfbGetTrack(pendingMatch.id) as { preview_url?: string | null }
+      if (!data.preview_url) return
+      const audio = new Audio(data.preview_url)
+      m4bAudioRef.current = audio
+      audio.addEventListener('ended', () => { m4bAudioRef.current = null; setM4bPreviewPlaying(false) })
+      await audio.play()
+      window.dispatchEvent(new CustomEvent('app:audio-start', { detail: 'm4b-preview' }))
+      setM4bPreviewPlaying(true)
+    } catch { /* ignore */ } finally {
+      setM4bPreviewLoading(false)
+    }
+  }
 
   function armConfirmDelete(): void {
     setConfirmDelete(true)
@@ -154,6 +185,11 @@ export function PropertiesPanel(): JSX.Element {
           <p className="text-[10px] text-gray-300 truncate">
             {pendingMatch.artists.map((a) => a.name).join(', ')} · {pendingMatch.album.title}
           </p>
+          {pendingMatchLinkedCount > 0 && (
+            <p className="text-[10px] text-gray-500">
+              {pendingMatchLinkedCount} file{pendingMatchLinkedCount === 1 ? '' : 's'} already linked to this track
+            </p>
+          )}
           <div className="flex gap-2 mt-0.5">
             <button
               type="button"
@@ -161,6 +197,32 @@ export function PropertiesPanel(): JSX.Element {
               className="flex-1 py-1 text-[11px] rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
             >
               Apply to Track
+            </button>
+            <button
+              type="button"
+              onClick={toggleM4bPreview}
+              disabled={m4bPreviewLoading}
+              title={m4bPreviewPlaying ? 'Stop preview' : 'Preview track'}
+              className={`shrink-0 w-6 h-6 flex items-center justify-center rounded-full border transition-colors disabled:opacity-40 ${
+                m4bPreviewPlaying
+                  ? 'border-accent text-accent'
+                  : 'border-gray-600 text-gray-600 hover:border-accent hover:text-accent'
+              }`}
+            >
+              {m4bPreviewLoading ? (
+                <svg className="w-2.5 h-2.5 animate-spin" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M6 1v2M6 9v2M1 6h2M9 6h2" strokeLinecap="round" />
+                </svg>
+              ) : m4bPreviewPlaying ? (
+                <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
+                  <rect x="1.5" y="1" width="2.5" height="8" rx="0.5" />
+                  <rect x="6" y="1" width="2.5" height="8" rx="0.5" />
+                </svg>
+              ) : (
+                <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
+                  <path d="M2 1.5l7 3.5-7 3.5V1.5z" />
+                </svg>
+              )}
             </button>
             <button
               type="button"
@@ -250,6 +312,8 @@ export function PropertiesPanel(): JSX.Element {
                     album: { id: number; title: string; image_url: string }
                     tags: Record<string, { id: number; name: string; slug: { en: string } }[]>
                     audio_features?: MfbAudioFeatures
+                    bandcamp_url?: string
+                    beatport_url?: string
                   }
                   const artist = data.artists.map((a) => a.name).join(', ')
                   const tags = Object.values(data.tags).flat().map((t) => t.name)
@@ -261,6 +325,8 @@ export function PropertiesPanel(): JSX.Element {
                     mfbApplied: true,
                     appliedPathGuess: true,
                     audioFeatures: data.audio_features ?? null,
+                    bandcampUrl: data.bandcamp_url ?? null,
+                    beatportUrl: data.beatport_url ?? null,
                     ...(hourSlug ? { breathworkPhase: hourSlug as import('../types').BreathworkPhase } : {}),
                   })
                   if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
@@ -520,6 +586,32 @@ export function PropertiesPanel(): JSX.Element {
         </div>
       )}
 
+      {(file.bandcampUrl || file.beatportUrl) && (
+        <div className="flex flex-col gap-2 p-3 border-b border-surface-border">
+          <span className="text-[10px] text-gray-400 uppercase tracking-wider">Buy</span>
+          <div className="flex gap-2">
+            {file.bandcampUrl && (
+              <button
+                type="button"
+                onClick={() => window.open(file.bandcampUrl!)}
+                className="px-2.5 py-1 text-[10px] rounded border border-surface-border text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors"
+              >
+                Bandcamp
+              </button>
+            )}
+            {file.beatportUrl && (
+              <button
+                type="button"
+                onClick={() => window.open(file.beatportUrl!)}
+                className="px-2.5 py-1 text-[10px] rounded border border-surface-border text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors"
+              >
+                Beatport
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Duplicate MFB match */}
       {duplicates.length > 0 && (
         <div className="flex flex-col gap-2 p-3 border-b border-surface-border">
@@ -541,6 +633,7 @@ export function PropertiesPanel(): JSX.Element {
             sampleRate={file.sampleRate}
             fileSize={file.fileSize}
             isCurrent
+            onUnlink={() => unlinkMfb(file.id)}
           />
 
           {/* Other files */}
@@ -563,24 +656,22 @@ export function PropertiesPanel(): JSX.Element {
             />
           ))}
 
-          {duplicates.length > 1 && (
+          <div className="flex gap-1.5">
             <button
               type="button"
               onClick={() => { for (const d of duplicates) unlinkMfb(d.id) }}
-              className="w-full py-1.5 text-[11px] rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+              className="flex-1 py-1.5 text-[11px] rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
             >
-              This is the right file — unlink the other {duplicates.length}
+              Unlink the other{duplicates.length > 1 ? ` ${duplicates.length}` : ''}
             </button>
-          )}
-          {duplicates.length === 1 && (
             <button
               type="button"
-              onClick={() => unlinkMfb(duplicates[0].id)}
-              className="w-full py-1.5 text-[11px] rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+              onClick={() => { for (const d of duplicates) removeFile(d.id) }}
+              className="flex-1 py-1.5 text-[11px] rounded border border-red-500/30 bg-red-500/5 text-red-400 hover:bg-red-500/15 transition-colors"
             >
-              This is the right file — unlink the other
+              Remove the other{duplicates.length > 1 ? ` ${duplicates.length}` : ''}
             </button>
-          )}
+          </div>
         </div>
       )}
 
@@ -629,10 +720,18 @@ function DupeRow({
   const previewFileId = useLibraryStore((s) => s.previewFileId)
   const setPreview = useLibraryStore((s) => s.setPreview)
   const isPlaying = previewFileId === id
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null)
 
   return (
     <div className={`flex flex-col gap-1 px-2 py-1.5 rounded border ${isCurrent ? 'border-accent/30 bg-accent/8' : 'border-surface-border bg-surface-hover'}`}>
-      <div className="flex items-center gap-1.5 min-w-0">
+      <div
+        className="flex items-center gap-1.5 min-w-0"
+        onMouseEnter={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect()
+          setTooltipPos({ x: rect.left, y: rect.top })
+        }}
+        onMouseLeave={() => setTooltipPos(null)}
+      >
         <button
           type="button"
           onClick={(e) => {
@@ -660,15 +759,25 @@ function DupeRow({
         </button>
         {isCurrent && <span className="text-[9px] text-accent uppercase tracking-wider shrink-0">current</span>}
         <span className="text-[11px] text-gray-200 truncate flex-1 min-w-0">{fileName}</span>
+        {tooltipPos && (
+          <div
+            className="fixed z-[999] bg-black rounded p-2 text-[10px] text-gray-200 shadow-lg pointer-events-none border border-white/10 max-w-xs"
+            style={{ left: tooltipPos.x, top: tooltipPos.y - 8, transform: 'translateY(-100%)' }}
+          >
+            <div className="font-medium break-all">{fileName}</div>
+            <div className="text-gray-400 mt-0.5 break-all">{folderPath}</div>
+            <div className="text-gray-500 mt-0.5 uppercase">{format} · {(sampleRate / 1000).toFixed(0)} kHz · {formatSize(fileSize)}</div>
+          </div>
+        )}
       </div>
       <span className="text-[10px] text-gray-500 truncate" title={folderPath}>{folderPath}</span>
       <div className="flex gap-2 items-center">
         <span className="text-[10px] text-gray-500 uppercase">{format}</span>
         <span className="text-[10px] text-gray-500">{(sampleRate / 1000).toFixed(0)} kHz</span>
         <span className="text-[10px] text-gray-500">{formatSize(fileSize)}</span>
-        {!isCurrent && (
+        {(onPrefer || onUnlink || onRemove) && (
           <div className="flex gap-2 ml-auto shrink-0">
-            {onPrefer && (
+            {!isCurrent && onPrefer && (
               <button type="button" onClick={onPrefer}
                 className="text-[10px] text-accent hover:text-white transition-colors font-medium">
                 Use this file
@@ -680,7 +789,7 @@ function DupeRow({
                 Unlink
               </button>
             )}
-            {onRemove && (
+            {!isCurrent && onRemove && (
               <button type="button" onClick={onRemove}
                 className="text-[10px] text-gray-500 hover:text-red-400 transition-colors">
                 Remove

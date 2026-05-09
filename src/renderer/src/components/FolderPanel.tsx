@@ -335,7 +335,7 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
             const inLibrary = files.filter(
               (f) => f.mfbTrackId !== null && playlist.trackIds.includes(f.mfbTrackId)
             ).length
-            const total = playlist.tracks.length
+            const total = playlist.trackIds.length
             return (
               <button
                 key={playlist.id}

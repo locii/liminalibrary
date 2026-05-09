@@ -105,6 +105,8 @@ export function registerScanHandlers(): void {
             mfbIndexed: false,
             mfbApplied: false,
             audioFeatures: null,
+            bandcampUrl: null,
+            beatportUrl: null,
           })
         } catch (e) {
           errors.push(`${filePath}: ${e}`)
@@ -217,21 +219,20 @@ export function registerScanHandlers(): void {
   ipcMain.handle('library:scanFile', async (_, filePath: string): Promise<LibraryFile | null> => {
     try {
       const stat = await fs.stat(filePath)
-      const meta = await parseFile(filePath, { skipCovers: true, duration: true })
       const dirPath = dirname(filePath)
-      return {
+      const base: LibraryFile = {
         id: fileId(filePath),
         filePath,
         fileName: basename(filePath),
-        artist: pickArtist(meta.common),
-        album: pickAlbum(meta.common),
+        artist: '',
+        album: '',
         artistPathGuess: '',
         albumPathGuess: '',
         appliedPathGuess: false,
         folderPath: dirPath,
-        duration: meta.format.duration ?? 0,
-        sampleRate: meta.format.sampleRate ?? 0,
-        channels: meta.format.numberOfChannels ?? 0,
+        duration: 0,
+        sampleRate: 0,
+        channels: 0,
         format: extname(filePath).replace('.', '').toLowerCase(),
         fileSize: stat.size,
         tags: [],
@@ -245,6 +246,24 @@ export function registerScanHandlers(): void {
         mfbIndexed: false,
         mfbApplied: false,
         audioFeatures: null,
+        bandcampUrl: null,
+        beatportUrl: null,
+      }
+      // 0-byte files (e.g. Dropbox cloud-only placeholders) can't be parsed —
+      // return the stub so MFB data can still be linked; metadata fills in on rescan.
+      if (stat.size === 0) return base
+      try {
+        const meta = await parseFile(filePath, { skipCovers: true, duration: true })
+        return {
+          ...base,
+          artist: pickArtist(meta.common),
+          album: pickAlbum(meta.common),
+          duration: meta.format.duration ?? 0,
+          sampleRate: meta.format.sampleRate ?? 0,
+          channels: meta.format.numberOfChannels ?? 0,
+        }
+      } catch {
+        return base
       }
     } catch {
       return null

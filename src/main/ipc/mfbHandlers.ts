@@ -13,7 +13,7 @@ interface CatalogueTrack {
 
 let catalogueCache: CatalogueTrack[] | null = null
 let catalogueCacheTime = 0
-const CACHE_TTL_MS = 12 * 60 * 60 * 1000 // 12 hours
+const CACHE_TTL_MS = 60 * 60 * 1000 // 1 hour
 
 function fetchJson<T>(url: string): Promise<T> {
   return new Promise((resolve, reject) => {

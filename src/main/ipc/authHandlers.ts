@@ -137,17 +137,47 @@ export function registerAuthHandlers(): void {
             : []
       return arr.map((p) => {
         const pl = p as Record<string, unknown>
-        const rawTracks = (pl['tracks'] ?? []) as { id: number; title: string; artist: string }[]
         return {
           id: pl['id'] as number,
           title: (pl['title'] ?? pl['name']) as string,
           trackIds: (pl['track_ids'] ?? pl['trackIds'] ?? []) as number[],
-          tracks: rawTracks,
         }
       })
     } catch (err) {
       console.error('[auth:getUserPlaylists] error:', err)
       return []
+    }
+  })
+
+  ipcMain.handle('auth:getPlaylist', async (_, id: number) => {
+    const token = await loadToken()
+    if (!token) return null
+    try {
+      const res = await apiGet<Record<string, unknown>>(`/playlist/${id}`, token)
+      const rawSegments = (res['segments'] ?? []) as Record<string, unknown>[]
+      return {
+        id: res['id'] as number,
+        title: res['title'] as string,
+        description: (res['description'] ?? '') as string,
+        segments: rawSegments.map((seg) => ({
+          id: seg['id'] as number,
+          name: seg['name'] as string,
+          order: (seg['order'] ?? 0) as number,
+          duration: (seg['duration'] ?? 0) as number,
+          tracks: ((seg['tracks'] ?? []) as Record<string, unknown>[]).map((t) => ({
+            id: t['id'] as number,
+            title: t['title'] as string,
+            artist: t['artist'] as string,
+            duration: (t['duration'] ?? 0) as number,
+            album_image_url: (t['album_image_url'] ?? '') as string,
+            bandcamp_url: (t['bandcamp_url'] ?? undefined) as string | undefined,
+            beatport_url: (t['beatport_url'] ?? undefined) as string | undefined,
+          })),
+        })),
+      }
+    } catch (err) {
+      console.error('[auth:getPlaylist] error:', err)
+      return null
     }
   })
 }

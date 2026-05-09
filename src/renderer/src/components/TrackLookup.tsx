@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { BREATHWORK_PHASES, mfbTrackUrl } from '../types'
 import type { BreathworkPhase, MfbAudioFeatures } from '../types'
 import { useLibraryStore } from '../store/libraryStore'
@@ -111,6 +111,8 @@ export function TrackLookup({ fileId, fileName, artist, folderArtist, folderAlbu
       mfbApplied: true,
       appliedPathGuess: true,
       audioFeatures: detail.audio_features ?? null,
+      bandcampUrl: detail.bandcamp_url ?? null,
+      beatportUrl: detail.beatport_url ?? null,
       ...(breathworkPhase !== null ? { breathworkPhase } : {}),
     })
     setDetail(null)
@@ -252,17 +254,7 @@ export function TrackLookup({ fileId, fileName, artist, folderArtist, folderAlbu
       {searchQuery && !searching && searchResults.length > 0 && !detail && (
         <div className="flex overflow-hidden overflow-y-auto flex-col max-h-52 rounded border divide-y border-surface-border divide-surface-border">
           {searchResults.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => selectResult(r.id)}
-              className="flex gap-2 items-start px-2 py-2 text-left transition-colors hover:bg-accent/10"
-            >
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] text-gray-300 truncate">{r.title}</p>
-                <p className="text-[10px] text-gray-600 truncate">{r.artist} · {r.album}</p>
-              </div>
-            </button>
+            <ResultRow key={r.id} title={r.title} sub={`${r.artist} · ${r.album}`} onSelect={() => selectResult(r.id)} />
           ))}
         </div>
       )}
@@ -279,20 +271,7 @@ export function TrackLookup({ fileId, fileName, artist, folderArtist, folderAlbu
       {!searchQuery && results.length > 0 && !detail && status === 'idle' && (
         <div className="flex overflow-hidden overflow-y-auto flex-col max-h-52 rounded border divide-y border-surface-border divide-surface-border">
           {results.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => selectResult(r.id)}
-              className="flex gap-2 items-start px-2 py-2 text-left transition-colors hover:bg-accent/10"
-            >
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] text-gray-300 truncate">{r.title}</p>
-                <p className="text-[10px] text-gray-600 truncate">{r.artist} · {r.album}</p>
-              </div>
-              <span className="text-[9px] text-gray-600 font-mono tabular-nums pt-0.5 shrink-0">
-                {Math.round(r.score * 100)}%
-              </span>
-            </button>
+            <ResultRow key={r.id} title={r.title} sub={`${r.artist} · ${r.album}`} score={r.score} onSelect={() => selectResult(r.id)} />
           ))}
         </div>
       )}
@@ -347,6 +326,42 @@ export function TrackLookup({ fileId, fileName, artist, folderArtist, folderAlbu
         </div>
       )}
     </div>
+  )
+}
+
+function ResultRow({ title, sub, score, onSelect }: { title: string; sub: string; score?: number; onSelect: () => void }): JSX.Element {
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null)
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="flex gap-2 items-start px-2 py-2 text-left transition-colors hover:bg-accent/10"
+    >
+      <div className="flex-1 min-w-0">
+        <div
+          className="flex items-center min-w-0"
+          onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setTooltipPos({ x: r.left, y: r.top }) }}
+          onMouseLeave={() => setTooltipPos(null)}
+        >
+          <p className="text-[11px] text-gray-300 truncate flex-1 min-w-0">{title}</p>
+          {tooltipPos && (
+            <div
+              className="fixed z-[999] bg-black rounded p-2 text-[10px] text-gray-200 shadow-lg pointer-events-none border border-white/10 max-w-xs"
+              style={{ left: tooltipPos.x, top: tooltipPos.y - 8, transform: 'translateY(-100%)' }}
+            >
+              <div className="font-medium break-all">{title}</div>
+              <div className="text-gray-400 mt-0.5 break-all">{sub}</div>
+            </div>
+          )}
+        </div>
+        <p className="text-[10px] text-gray-600 truncate">{sub}</p>
+      </div>
+      {score !== undefined && (
+        <span className="text-[9px] text-gray-600 font-mono tabular-nums pt-0.5 shrink-0">
+          {Math.round(score * 100)}%
+        </span>
+      )}
+    </button>
   )
 }
 

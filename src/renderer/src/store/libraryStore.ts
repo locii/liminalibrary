@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { BreathworkPhase, Catalogue, LibraryFile, MfbMatch, MfbPlaylist, MfbTag, WatchedFolder } from '../types'
+import type { BreathworkPhase, Catalogue, LibraryFile, MfbMatch, MfbPlaylist, MfbPlaylistDetail, MfbTag, WatchedFolder } from '../types'
 
 function normalizeImportedFile(f: Catalogue['files'][number]): LibraryFile {
   return {
@@ -14,6 +14,8 @@ function normalizeImportedFile(f: Catalogue['files'][number]): LibraryFile {
     mfbIndexed: f.mfbIndexed ?? false,
     mfbApplied: f.mfbApplied ?? false,
     audioFeatures: f.audioFeatures ?? null,
+    bandcampUrl: f.bandcampUrl ?? null,
+    beatportUrl: f.beatportUrl ?? null,
   }
 }
 
@@ -37,6 +39,7 @@ interface LibraryState {
   showLoginModal: boolean
   playlists: MfbPlaylist[]
   selectedPlaylistId: number | null
+  selectedPlaylistDetail: MfbPlaylistDetail | null
   selectedMissingTrackId: number | null
   playlistSessions: Record<number, string>
 
@@ -45,6 +48,7 @@ interface LibraryState {
   setShowLoginModal: (show: boolean) => void
   setPlaylists: (playlists: MfbPlaylist[]) => void
   selectPlaylist: (id: number | null) => void
+  setPlaylistDetail: (detail: MfbPlaylistDetail | null) => void
   selectMissingTrack: (id: number | null) => void
   setPlaylistSession: (playlistId: number, filePath: string) => void
   loadCatalogue: (catalogue: Catalogue) => void
@@ -91,6 +95,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   showLoginModal: false,
   playlists: [],
   selectedPlaylistId: null,
+  selectedPlaylistDetail: null,
   selectedMissingTrackId: null,
   playlistSessions: {},
   unmatchedOnly: false,
@@ -103,7 +108,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   setUserAccount: (user) => set({ userAccount: user }),
   setShowLoginModal: (show) => set({ showLoginModal: show }),
   setPlaylists: (playlists) => set({ playlists }),
-  selectPlaylist: (id) => set({ selectedPlaylistId: id, selectedFolderId: null, selectedTags: [], selectedFileId: null, selectedMissingTrackId: null, unmatchedOnly: false }),
+  selectPlaylist: (id) => set({ selectedPlaylistId: id, selectedPlaylistDetail: null, selectedFolderId: null, selectedTags: [], selectedFileId: null, selectedMissingTrackId: null, unmatchedOnly: false }),
+  setPlaylistDetail: (detail) => set({ selectedPlaylistDetail: detail }),
   selectMissingTrack: (id) => set({ selectedMissingTrackId: id, selectedFileId: null }),
 
   setPlaylistSession: (playlistId, filePath) => set((s) => ({
@@ -227,6 +233,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
               mfbApplied: true,
               appliedPathGuess: true,
               audioFeatures: match.audio_features ?? null,
+              bandcampUrl: match.bandcamp_url ?? null,
+              beatportUrl: match.beatport_url ?? null,
               ...(hourTag ? { breathworkPhase: hourTag.slug.en as BreathworkPhase } : {}) }
           : f
       ),
@@ -252,6 +260,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         ...f, artist, album: match.album.title, tags, notes: match.description ?? '',
         trackTitle: match.title, mfbTrackId: match.id, mfbApplied: true, appliedPathGuess: true,
         audioFeatures: match.audio_features ?? null,
+        bandcampUrl: match.bandcamp_url ?? null,
+        beatportUrl: match.beatport_url ?? null,
         ...(hourTag ? { breathworkPhase: hourTag.slug.en as BreathworkPhase } : {}),
       }
     })
@@ -270,6 +280,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
             breathworkPhase: null,
             tags: [],
             audioFeatures: null,
+            bandcampUrl: null,
+            beatportUrl: null,
             notes: '',
           }
         : f
@@ -293,6 +305,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       breathworkPhase: null,
       tags: [],
       audioFeatures: null,
+      bandcampUrl: null,
+      beatportUrl: null,
       notes: '',
     })),
   })),

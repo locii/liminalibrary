@@ -196,6 +196,18 @@ export function PlayerBar(): JSX.Element | null {
     if (next !== undefined) setPreview(next, previewQueue)
   }, [file?.id, previewQueue, setPreview])
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent): void => {
+      if (!file) return
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      if (e.key === 'ArrowLeft') { e.preventDefault(); navigate(-1) }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); navigate(1) }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [file, navigate])
+
   const close = useCallback((): void => {
     audioRef.current?.pause()
     audioRef.current = null

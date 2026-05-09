@@ -81,6 +81,8 @@ export interface LibraryFile {
   mfbIndexed: boolean  // whether this track has been searched against MFB
   mfbApplied: boolean  // whether an MFB match was applied to this track
   audioFeatures: MfbAudioFeatures | null
+  bandcampUrl: string | null
+  beatportUrl: string | null
 }
 
 export interface MfbTag { id: number; name: string; slug: { en: string } }
@@ -110,6 +112,8 @@ export interface MfbMatch {
   audio_features?: MfbAudioFeatures
   tags: Record<string, MfbTag[]>
   description: string
+  bandcamp_url?: string
+  beatport_url?: string
 }
 
 export function mfbTrackUrl(id: number, slugOrTitle: string): string {
@@ -121,13 +125,33 @@ export interface MfbPlaylistTrack {
   id: number
   title: string
   artist: string
+  duration: number  // milliseconds
+  album_image_url?: string
+  bandcamp_url?: string
+  beatport_url?: string
 }
 
+export interface MfbPlaylistSegment {
+  id: number
+  name: string
+  order: number
+  duration: number
+  tracks: MfbPlaylistTrack[]
+}
+
+/** Lightweight list item returned by /user/playlists */
 export interface MfbPlaylist {
   id: number
   title: string
   trackIds: number[]
-  tracks: MfbPlaylistTrack[]
+}
+
+/** Full playlist detail returned by /user/playlists/:id */
+export interface MfbPlaylistDetail {
+  id: number
+  title: string
+  description?: string
+  segments: MfbPlaylistSegment[]
 }
 
 export interface Catalogue {

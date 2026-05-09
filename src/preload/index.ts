@@ -35,6 +35,7 @@ const api: LibraryAPI = {
   authLogout: () => ipcRenderer.invoke('auth:logout'),
   authMe: () => ipcRenderer.invoke('auth:me'),
   getUserPlaylists: () => ipcRenderer.invoke('auth:getUserPlaylists'),
+  getPlaylist: (id) => ipcRenderer.invoke('auth:getPlaylist', id),
 
   studioSaveSession: (json, defaultName) => ipcRenderer.invoke('studio:saveSession', json, defaultName),
   studioOpenFile: (filePath) => ipcRenderer.invoke('studio:openFile', filePath),
