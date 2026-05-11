@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.6.1
+## v0.7
 
 - **Apple Music buy button** — Playlist tracks and the Missing Track panel now show a "Buy on Apple Music" button when the MFB database has an Apple Music URL for that track. The button opens the Apple Music app directly (via the `music://` deep-link protocol) and automatically swaps the country segment in the URL to match the user's system locale.
 
