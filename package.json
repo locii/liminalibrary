@@ -1,6 +1,6 @@
 {
   "name": "limina-library",
-  "version": "0.7",
+  "version": "0.7.0",
   "description": "Limina Library — music catalogue for breathwork facilitators",
   "author": "Anthony Olsen",
   "main": "out/main/index.js",
