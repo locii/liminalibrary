@@ -172,6 +172,7 @@ export function registerAuthHandlers(): void {
             album_image_url: (t['album_image_url'] ?? '') as string,
             bandcamp_url: (t['bandcamp_url'] ?? undefined) as string | undefined,
             beatport_url: (t['beatport_url'] ?? undefined) as string | undefined,
+            apple_music_url: (t['apple_music_url'] ?? undefined) as string | undefined,
           })),
         })),
       }

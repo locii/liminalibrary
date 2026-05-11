@@ -13,4 +13,4 @@ export type {
   MfbPlaylistDetail,
 } from '../../../shared/types'
 
-export { BREATHWORK_PHASES, PHASE_COLORS, phaseColorForTag, mfbTrackUrl } from '../../../shared/types'
+export { BREATHWORK_PHASES, PHASE_COLORS, phaseColorForTag, mfbTrackUrl, appleMusicDeepLink } from '../../../shared/types'

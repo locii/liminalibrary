@@ -18,6 +18,9 @@ interface TrackDetail {
   album: ApiAlbum
   tags: Record<string, ApiTag[]>
   audio_features?: MfbAudioFeatures
+  bandcamp_url?: string
+  beatport_url?: string
+  apple_music_url?: string
 }
 
 const VALID_PHASES = new Set(BREATHWORK_PHASES.map((p) => p.value))
@@ -113,6 +116,7 @@ export function TrackLookup({ fileId, fileName, artist, folderArtist, folderAlbu
       audioFeatures: detail.audio_features ?? null,
       bandcampUrl: detail.bandcamp_url ?? null,
       beatportUrl: detail.beatport_url ?? null,
+      appleMusicUrl: detail.apple_music_url ?? null,
       ...(breathworkPhase !== null ? { breathworkPhase } : {}),
     })
     setDetail(null)

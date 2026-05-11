@@ -16,6 +16,7 @@ function normalizeImportedFile(f: Catalogue['files'][number]): LibraryFile {
     audioFeatures: f.audioFeatures ?? null,
     bandcampUrl: f.bandcampUrl ?? null,
     beatportUrl: f.beatportUrl ?? null,
+    appleMusicUrl: f.appleMusicUrl ?? null,
   }
 }
 
@@ -235,6 +236,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
               audioFeatures: match.audio_features ?? null,
               bandcampUrl: match.bandcamp_url ?? null,
               beatportUrl: match.beatport_url ?? null,
+              appleMusicUrl: match.apple_music_url ?? null,
               ...(hourTag ? { breathworkPhase: hourTag.slug.en as BreathworkPhase } : {}) }
           : f
       ),
@@ -262,6 +264,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         audioFeatures: match.audio_features ?? null,
         bandcampUrl: match.bandcamp_url ?? null,
         beatportUrl: match.beatport_url ?? null,
+        appleMusicUrl: match.apple_music_url ?? null,
         ...(hourTag ? { breathworkPhase: hourTag.slug.en as BreathworkPhase } : {}),
       }
     })
@@ -282,6 +285,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
             audioFeatures: null,
             bandcampUrl: null,
             beatportUrl: null,
+            appleMusicUrl: null,
             notes: '',
           }
         : f
@@ -307,6 +311,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       audioFeatures: null,
       bandcampUrl: null,
       beatportUrl: null,
+      appleMusicUrl: null,
       notes: '',
     })),
   })),

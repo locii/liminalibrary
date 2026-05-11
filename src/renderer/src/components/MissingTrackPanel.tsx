@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useLibraryStore } from '../store/libraryStore'
-import { mfbTrackUrl } from '../types'
+import { mfbTrackUrl, appleMusicDeepLink } from '../types'
 import type { BreathworkPhase, LibraryFile, MfbAudioFeatures } from '../types'
 
 export function MissingTrackPanel(): JSX.Element {
@@ -145,25 +145,7 @@ export function MissingTrackPanel(): JSX.Element {
             <p className="text-[11px] text-gray-200 font-medium leading-snug">{track.title}</p>
             <p className="text-[11px] text-gray-500">{track.artist}</p>
           </div>
-          <div className="flex gap-1 shrink-0 items-center">
-            {track.bandcamp_url && (
-              <button
-                type="button"
-                onClick={() => window.open(track.bandcamp_url!)}
-                className="px-2.5 py-1 text-[10px] font-medium rounded border transition-colors text-[#1da0c3] border-[#1da0c3]/40 bg-[#1da0c3]/10 hover:bg-[#1da0c3]/20"
-              >
-                Buy on Bandcamp
-              </button>
-            )}
-            {track.beatport_url && (
-              <button
-                type="button"
-                onClick={() => window.open(track.beatport_url!)}
-                className="px-2.5 py-1 text-[10px] font-medium rounded border transition-colors text-[#97f04f] border-[#97f04f]/40 bg-[#97f04f]/10 hover:bg-[#97f04f]/20"
-              >
-                Buy on Beatport
-              </button>
-            )}
+          
             <button
               type="button"
               onClick={() => window.open(mfbTrackUrl(track.id, track.title))}
@@ -191,7 +173,36 @@ export function MissingTrackPanel(): JSX.Element {
           <p className="text-[10px] text-gray-500 leading-relaxed">
             Find the matching file below and apply to link it.
           </p>
+          
         </div>
+        <div className="flex gap-2 items-center p-2 shrink-0">
+            {track.bandcamp_url && (
+              <button
+                type="button"
+                onClick={() => window.open(track.bandcamp_url!)}
+                className="px-2.5 py-1 text-[10px] font-medium rounded border transition-colors text-[#1da0c3] border-[#1da0c3]/40 bg-[#1da0c3]/10 hover:bg-[#1da0c3]/20"
+              >
+                Buy on Bandcamp
+              </button>
+            )}
+            {track.beatport_url && (
+              <button
+                type="button"
+                onClick={() => window.open(track.beatport_url!)}
+                className="px-2.5 py-1 text-[10px] font-medium rounded border transition-colors text-[#97f04f] border-[#97f04f]/40 bg-[#97f04f]/10 hover:bg-[#97f04f]/20"
+              >
+                Buy on Beatport
+              </button>
+            )}
+            {track.apple_music_url && (
+              <button
+                type="button"
+                onClick={() => window.open(appleMusicDeepLink(track.apple_music_url!))}
+                className="px-2.5 py-1 text-[10px] font-medium rounded border transition-colors text-[#fc3c44] border-[#fc3c44]/40 bg-[#fc3c44]/10 hover:bg-[#fc3c44]/20"
+              >
+                Buy on Apple Music
+              </button>
+            )}
       </div>
 
       {/* File search */}
@@ -285,7 +296,7 @@ export function MissingTrackPanel(): JSX.Element {
       </div>
 
       {/* Apply footer */}
-      <div className="p-3 border-t border-surface-border shrink-0 flex flex-col gap-2">
+      <div className="flex flex-col gap-2 p-3 border-t border-surface-border shrink-0">
         {pickedDiskPath && !done && (() => {
           const sep = pickedDiskPath.includes('\\') ? '\\' : '/'
           const folderName = pickedDiskPath.split(sep).slice(-2, -1)[0] ?? ''

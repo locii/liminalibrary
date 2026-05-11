@@ -83,6 +83,7 @@ export interface LibraryFile {
   audioFeatures: MfbAudioFeatures | null
   bandcampUrl: string | null
   beatportUrl: string | null
+  appleMusicUrl: string | null
 }
 
 export interface MfbTag { id: number; name: string; slug: { en: string } }
@@ -114,6 +115,16 @@ export interface MfbMatch {
   description: string
   bandcamp_url?: string
   beatport_url?: string
+  apple_music_url?: string
+}
+
+export function appleMusicDeepLink(url: string): string {
+  const lang = (typeof navigator !== 'undefined' ? navigator.language : undefined) || 'en-US'
+  const m = lang.match(/[a-z]{2}-([A-Z]{2})/i)
+  const country = m ? m[1].toLowerCase() : 'us'
+  return url
+    .replace(/(music\.apple\.com\/)[a-z]{2}(\/)/, `$1${country}$2`)
+    .replace('https://', 'music://')
 }
 
 export function mfbTrackUrl(id: number, slugOrTitle: string): string {
@@ -129,6 +140,7 @@ export interface MfbPlaylistTrack {
   album_image_url?: string
   bandcamp_url?: string
   beatport_url?: string
+  apple_music_url?: string
 }
 
 export interface MfbPlaylistSegment {

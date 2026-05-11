@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useLibraryStore } from '../store/libraryStore'
 import type { LibraryFile, MfbPlaylistDetail, MfbPlaylistTrack } from '../types'
+import { appleMusicDeepLink } from '../types'
 
 const SEGMENT_COLORS = [
   '#6366f1', '#3b82f6', '#14b8a6', '#22c55e',
@@ -383,6 +384,15 @@ export function PlaylistPanel(): JSX.Element {
                         className="shrink-0 px-1.5 py-px text-[9px] font-medium rounded border transition-colors text-[#97f04f] border-[#97f04f]/40 bg-[#97f04f]/10 hover:bg-[#97f04f]/20 leading-tight"
                       >
                         Buy at Beatport
+                      </button>
+                    )}
+                    {!file && track.apple_music_url && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); window.open(appleMusicDeepLink(track.apple_music_url!)) }}
+                        className="shrink-0 px-1.5 py-px text-[9px] font-medium rounded border transition-colors text-[#fc3c44] border-[#fc3c44]/40 bg-[#fc3c44]/10 hover:bg-[#fc3c44]/20 leading-tight"
+                      >
+                        Buy on Apple Music
                       </button>
                     )}
                   </div>
