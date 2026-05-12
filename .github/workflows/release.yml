@@ -95,7 +95,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Revalidate changelog on getliminastudio
+        env:
+          REVALIDATE_TOKEN: ${{ secrets.REVALIDATE_TOKEN }}
         run: |
-          curl -s -o /dev/null -w "%{http_code}" \
+          if [ -z "$REVALIDATE_TOKEN" ]; then
+            echo "REVALIDATE_TOKEN secret is not set on this repo" >&2
+            exit 1
+          fi
+          code=$(curl -s -o /tmp/revalidate.out -w "%{http_code}" \
             -X POST https://www.getliminastudio.com/api/revalidate \
-            -H "x-revalidate-token: ${{ secrets.REVALIDATE_TOKEN }}"
+            -H "x-revalidate-token: $REVALIDATE_TOKEN")
+          echo "HTTP $code"
+          cat /tmp/revalidate.out || true
+          if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+            exit 1
+          fi
