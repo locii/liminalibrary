@@ -80,6 +80,7 @@ export interface LibraryFile {
   mfbTrackId: number | null  // MFB track ID once applied; null until then
   mfbIndexed: boolean  // whether this track has been searched against MFB
   mfbApplied: boolean  // whether an MFB match was applied to this track
+  mfbMatchRejected: boolean  // user dismissed a pending match; skip auto re-indexing
   audioFeatures: MfbAudioFeatures | null
   bandcampUrl: string | null
   beatportUrl: string | null

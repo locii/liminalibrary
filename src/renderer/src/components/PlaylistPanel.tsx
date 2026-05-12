@@ -18,10 +18,10 @@ function formatDuration(seconds: number): string {
 }
 
 const ANALYSIS_WINDOW_S = 0.5
-const FADE_OUT_THRESHOLD = 0.025  // ~-32 dBFS: below = silence tail
-const LOUD_IN_THRESHOLD = 0.1     // ~-20 dBFS: above on first window = "bang" start
+const FADE_OUT_THRESHOLD = 0.025   // ~-32 dBFS: below = silence tail
+const CONTENT_THRESHOLD_RATIO = 0.25  // main content starts when RMS exceeds 25% of track peak
 const MAX_FADEOUT_S = 20
-const MAX_FADEIN_S = 10
+const MAX_FADEIN_S = 30
 const MIN_FADE_S = 0.5
 const ANALYZE_TIMEOUT_MS = 15_000
 
@@ -32,10 +32,10 @@ function windowRMS(data: Float32Array, startSample: number, windowSamples: numbe
   return Math.sqrt(sum / (end - startSample))
 }
 
-async function analyzeTransitions(filePath: string): Promise<{ fadeIn: number; fadeOut: number }> {
+async function analyzeTransitions(filePath: string, sampleRate: number, port: number): Promise<{ fadeIn: number; fadeOut: number }> {
   const defaults = { fadeIn: 3, fadeOut: 8 }
   const work = async (): Promise<{ fadeIn: number; fadeOut: number }> => {
-    const res = await fetch(`file://${filePath}`)
+    const res = await fetch(`http://127.0.0.1:${port}${encodeURI(filePath)}?sr=${sampleRate}`)
     const arrayBuffer = await res.arrayBuffer()
     const ctx = new AudioContext()
     const audio = await ctx.decodeAudioData(arrayBuffer)
@@ -51,7 +51,18 @@ async function analyzeTransitions(filePath: string): Promise<{ fadeIn: number; f
       for (let i = 0; i < audio.length; i++) mono[i] += chData[i] / audio.numberOfChannels
     }
 
-    // Scan from end backwards — find last window with signal above threshold
+    // Find peak RMS of the track body (skip first/last 5% to avoid artifacts)
+    const bodyStart = Math.floor(mono.length * 0.05)
+    const bodyEnd = Math.floor(mono.length * 0.95)
+    let peakRms = 0
+    for (let i = bodyStart; i < bodyEnd; i += winSamples) {
+      const rms = windowRMS(mono, i, winSamples)
+      if (rms > peakRms) peakRms = rms
+    }
+    // Main content threshold: relative to the track's own peak level
+    const contentThreshold = Math.max(peakRms * CONTENT_THRESHOLD_RATIO, FADE_OUT_THRESHOLD)
+
+    // Scan from end backwards — find last window with signal above silence threshold
     let fadeOut = MAX_FADEOUT_S
     const outScanStart = Math.max(0, mono.length - Math.floor(MAX_FADEOUT_S * sr))
     for (let i = mono.length - winSamples; i >= outScanStart; i -= winSamples) {
@@ -61,20 +72,36 @@ async function analyzeTransitions(filePath: string): Promise<{ fadeIn: number; f
       }
     }
 
-    // Check first window for "bang" start; else scan forward for first loud window
+    // Find main content start — first window that clears the relative threshold
     let fadeIn: number
-    if (windowRMS(mono, 0, winSamples) > LOUD_IN_THRESHOLD) {
-      fadeIn = MIN_FADE_S
+    const inScanEnd = Math.min(mono.length, Math.floor(MAX_FADEIN_S * sr))
+    if (windowRMS(mono, 0, winSamples) >= contentThreshold) {
+      fadeIn = MIN_FADE_S  // track opens at full content immediately
     } else {
       fadeIn = MAX_FADEIN_S
-      const inScanEnd = Math.min(mono.length, Math.floor(MAX_FADEIN_S * sr))
       for (let i = winSamples; i < inScanEnd; i += winSamples) {
-        if (windowRMS(mono, i, winSamples) > LOUD_IN_THRESHOLD) {
+        if (windowRMS(mono, i, winSamples) >= contentThreshold) {
           fadeIn = i / sr
           break
         }
       }
     }
+
+    const name = filePath.split('/').pop() ?? filePath
+    // Log first 30s of RMS values to diagnose detection
+    const diagWindows = Math.floor(30 / ANALYSIS_WINDOW_S)
+    const diagRms = Array.from({ length: diagWindows }, (_, i) =>
+      +windowRMS(mono, i * winSamples, winSamples).toFixed(4)
+    )
+    console.log('[analyzeTransitions]', name, {
+      sampleRate: sr,
+      durationS: +(mono.length / sr).toFixed(1),
+      peakRms: +peakRms.toFixed(4),
+      contentThreshold: +contentThreshold.toFixed(4),
+      fadeIn: +fadeIn.toFixed(2),
+      fadeOut: +fadeOut.toFixed(2),
+      rmsFirst30s: diagRms,
+    })
 
     return { fadeIn, fadeOut }
   }
@@ -96,8 +123,8 @@ async function buildLiminaSession(detail: MfbPlaylistDetail, files: LibraryFile[
     .map((t) => fileByMfbId.get(t.id))
     .filter((f): f is LibraryFile => f !== undefined)
 
-  const analyses = await Promise.all(orderedFiles.map((f) => analyzeTransitions(f.filePath)))
-  const transitionMap = new Map(orderedFiles.map((f, i) => [f.filePath, analyses[i]]))
+  const port = await window.electronAPI.getAudioServerPort()
+  const analyses = await Promise.all(orderedFiles.map((f) => analyzeTransitions(f.filePath, f.sampleRate, port)))
 
   const trackAId = crypto.randomUUID()
   const trackBId = crypto.randomUUID()
@@ -110,7 +137,6 @@ async function buildLiminaSession(detail: MfbPlaylistDetail, files: LibraryFile[
   let clipIndex = 0
   let cursor = 0
   let isFirstClip = true
-  let prevFadeOut = 0
   const clips: object[] = []
   const segments: object[] = []
 
@@ -121,12 +147,20 @@ async function buildLiminaSession(detail: MfbPlaylistDetail, files: LibraryFile[
     for (const track of segment.tracks) {
       const file = fileByMfbId.get(track.id)
       if (!file) continue
-      const analysis = transitionMap.get(file.filePath) ?? { fadeIn: 3, fadeOut: 8 }
-      // Cap fadeOut to half the duration; cap fadeIn to the overlap window from prev track
-      const fadeOut = Math.min(analysis.fadeOut, file.duration * 0.5)
-      const fadeIn = isFirstClip ? 0 : Math.min(analysis.fadeIn, prevFadeOut)
-      const startTime = cursor  // cursor is already the overlap point from prev fadeOut
+      const analysis = analyses[clipIndex] ?? { fadeIn: 3, fadeOut: 8 }
 
+      const fadeOut = Math.min(analysis.fadeOut, file.duration * 0.5)
+      // fadeIn is the detected intro length — used as-is so volume hits 100% when content starts
+      const fadeIn = isFirstClip ? 0 : Math.min(analysis.fadeIn, file.duration * 0.5)
+
+      // Overlap = whichever is longer: this track's tail or the next track's intro.
+      // This lets both fade independently without truncating either.
+      const nextFile = orderedFiles[clipIndex + 1] ?? null
+      const nextAnalysis = nextFile ? (analyses[clipIndex + 1] ?? null) : null
+      const nextFadeIn = nextAnalysis ? Math.min(nextAnalysis.fadeIn, nextFile!.duration * 0.5) : 0
+      const overlap = Math.min(Math.max(fadeOut, nextFadeIn), file.duration * 0.5)
+
+      const startTime = cursor
       segLastClipEnd = startTime + file.duration
       clips.push({
         id: crypto.randomUUID(),
@@ -138,7 +172,7 @@ async function buildLiminaSession(detail: MfbPlaylistDetail, files: LibraryFile[
         trimStart: 0,
         trimEnd: 0,
         fadeIn,
-        fadeOut,
+        fadeOut: overlap,  // extend fade-out to cover the full crossfade window
         fadeInCurve: 0.5,
         fadeOutCurve: 0.5,
         crossfadeIn: 0,
@@ -147,9 +181,8 @@ async function buildLiminaSession(detail: MfbPlaylistDetail, files: LibraryFile[
         automation: [],
       })
 
-      // Advance cursor to fadeOut seconds before this clip ends (overlap point for next clip)
-      cursor = startTime + file.duration - fadeOut
-      prevFadeOut = fadeOut
+      // Start next clip early enough for both fades to complete
+      cursor = startTime + file.duration - overlap
       isFirstClip = false
       clipIndex++
     }
@@ -336,7 +369,7 @@ export function PlaylistPanel(): JSX.Element {
                       ? 'bg-accent/15'
                       : file
                       ? 'hover:bg-surface-hover'
-                      : 'opacity-50 hover:opacity-75 hover:bg-surface-hover'
+                      : 'opacity-70 hover:opacity-75 hover:bg-surface-hover'
                   }`}
                   style={{ height: 28 }}
                 >

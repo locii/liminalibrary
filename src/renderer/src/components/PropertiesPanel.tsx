@@ -92,9 +92,13 @@ export function PropertiesPanel(): JSX.Element {
   const [m4bPreviewPlaying, setM4bPreviewPlaying] = useState(false)
   const [m4bPreviewLoading, setM4bPreviewLoading] = useState(false)
 
+  const previewFileId = useLibraryStore((s) => s.previewFileId)
+  const setPreview = useLibraryStore((s) => s.setPreview)
+
   const file = files.find((f) => f.id === selectedFileId)
   const pendingMatch = file ? pendingMatches[file.id] : undefined
-  const pendingMatchLinkedCount = pendingMatch ? files.filter((f) => f.mfbTrackId === pendingMatch.id).length : 0
+  const pendingMatchLinkedFiles = pendingMatch ? files.filter((f) => f.mfbTrackId === pendingMatch.id) : []
+  const pendingMatchLinkedCount = pendingMatchLinkedFiles.length
   const duplicates = file?.mfbTrackId !== null && file?.mfbTrackId !== undefined
     ? files.filter((f) => f.id !== file.id && f.mfbTrackId === file.mfbTrackId)
     : []
@@ -186,9 +190,40 @@ export function PropertiesPanel(): JSX.Element {
             {pendingMatch.artists.map((a) => a.name).join(', ')} · {pendingMatch.album.title}
           </p>
           {pendingMatchLinkedCount > 0 && (
-            <p className="text-[10px] text-gray-500">
-              {pendingMatchLinkedCount} file{pendingMatchLinkedCount === 1 ? '' : 's'} already linked to this track
-            </p>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] text-gray-500">
+                {pendingMatchLinkedCount} file{pendingMatchLinkedCount === 1 ? '' : 's'} already linked to this track
+              </span>
+              {pendingMatchLinkedFiles.map((lf) => (
+                <div key={lf.id} className="flex items-center gap-1.5 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (previewFileId === lf.id) setPreview(null, [])
+                      else setPreview(lf.id, [lf.id])
+                    }}
+                    title={previewFileId === lf.id ? 'Stop preview' : 'Preview linked file'}
+                    className={`shrink-0 w-4 h-4 flex items-center justify-center rounded-full border transition-colors ${
+                      previewFileId === lf.id
+                        ? 'border-accent text-accent'
+                        : 'border-gray-600 text-gray-600 hover:border-accent hover:text-accent'
+                    }`}
+                  >
+                    {previewFileId === lf.id ? (
+                      <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
+                        <rect x="1.5" y="1" width="2.5" height="8" rx="0.5" />
+                        <rect x="6" y="1" width="2.5" height="8" rx="0.5" />
+                      </svg>
+                    ) : (
+                      <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
+                        <path d="M2 1.5l7 3.5-7 3.5V1.5z" />
+                      </svg>
+                    )}
+                  </button>
+                  <span className="text-[10px] text-gray-400 truncate flex-1 min-w-0" title={lf.filePath}>{lf.fileName}</span>
+                </div>
+              ))}
+            </div>
           )}
           <div className="flex gap-2 mt-0.5">
             <button

@@ -13,6 +13,7 @@ function normalizeImportedFile(f: Catalogue['files'][number]): LibraryFile {
     mfbTrackId: f.mfbTrackId ?? null,
     mfbIndexed: f.mfbIndexed ?? false,
     mfbApplied: f.mfbApplied ?? false,
+    mfbMatchRejected: f.mfbMatchRejected ?? false,
     audioFeatures: f.audioFeatures ?? null,
     bandcampUrl: f.bandcampUrl ?? null,
     beatportUrl: f.beatportUrl ?? null,
@@ -245,7 +246,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
   clearPendingMatch: (fileId) => set((s) => {
     const { [fileId]: _, ...rest } = s.pendingMatches
-    return { pendingMatches: rest }
+    return {
+      pendingMatches: rest,
+      files: s.files.map((f) => f.id === fileId ? { ...f, mfbMatchRejected: true } : f),
+    }
   }),
 
   applyAllPendingMatches: () => set((s) => {
@@ -279,6 +283,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
             mfbTrackId: null,
             mfbApplied: false,
             mfbIndexed: false,
+            mfbMatchRejected: false,
             trackTitle: '',
             breathworkPhase: null,
             tags: [],
@@ -294,7 +299,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
   resetUnmatchedIndexing: () => set((s) => ({
     files: s.files.map((f) =>
-      !f.mfbTrackId && !s.pendingMatches[f.id] ? { ...f, mfbIndexed: false } : f
+      !f.mfbTrackId && !f.mfbMatchRejected && !s.pendingMatches[f.id] ? { ...f, mfbIndexed: false } : f
     ),
   })),
 
@@ -305,6 +310,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       mfbTrackId: null,
       mfbApplied: false,
       mfbIndexed: false,
+      mfbMatchRejected: false,
       trackTitle: '',
       breathworkPhase: null,
       tags: [],

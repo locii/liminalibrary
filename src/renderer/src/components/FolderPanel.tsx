@@ -53,6 +53,10 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
   const [mode, setMode] = useState<PanelMode>('folders')
   const [isDragOver, setIsDragOver] = useState(false)
   const [tagQuery, setTagQuery] = useState('')
+  const [folderQuery, setFolderQuery] = useState('')
+  const [playlistSearch, setPlaylistSearch] = useState('')
+  const [playlistSort, setPlaylistSort] = useState<'name' | 'date'>('date')
+  const [playlistSortDir, setPlaylistSortDir] = useState<'asc' | 'desc'>('desc')
   const [loadingPlaylists, setLoadingPlaylists] = useState(false)
   const [dropWarning, setDropWarning] = useState<string | null>(null)
 
@@ -95,21 +99,39 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
     if (next === 'folders') {
       clearSelectedTags()
       setTagQuery('')
+      setPlaylistSearch('')
       selectPlaylist(null)
     } else if (next === 'tags') {
       selectFolder(null)
+      setFolderQuery('')
+      setPlaylistSearch('')
       selectPlaylist(null)
     } else {
       selectFolder(null)
+      setFolderQuery('')
       clearSelectedTags()
       setTagQuery('')
     }
   }
 
+  const folderFilter = folderQuery.trim().toLowerCase()
+  const filteredFolders = folderFilter
+    ? watchedFolders.filter((f) => f.label.toLowerCase().includes(folderFilter))
+    : watchedFolders
+
   const tagFilter = tagQuery.trim().toLowerCase()
   const filteredTags = tagFilter
     ? sidebarTags.filter(([tag]) => tag.toLowerCase().includes(tagFilter))
     : sidebarTags
+
+  const playlistFilter = playlistSearch.trim().toLowerCase()
+  const filteredPlaylists = playlists
+    .filter((p) => !playlistFilter || p.title.toLowerCase().includes(playlistFilter))
+    .slice()
+    .sort((a, b) => {
+      const base = playlistSort === 'name' ? a.title.localeCompare(b.title) : b.id - a.id
+      return playlistSortDir === 'asc' ? base : -base
+    })
 
   function handleDragOver(e: React.DragEvent): void {
     e.preventDefault()
@@ -199,6 +221,26 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
 
       {mode === 'folders' && (
         <>
+          <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-surface-border shrink-0">
+            <svg className="w-3 h-3 text-gray-600 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="5" cy="5" r="3.5" />
+              <path d="M8 8l2.5 2.5" />
+            </svg>
+            <input
+              type="text"
+              value={folderQuery}
+              onChange={(e) => setFolderQuery(e.target.value)}
+              placeholder="Filter folders…"
+              className="flex-1 min-w-0 bg-transparent text-[11px] text-gray-300 placeholder-gray-700 outline-none"
+            />
+            {folderQuery ? (
+              <button type="button" onClick={() => setFolderQuery('')} className="text-gray-600 transition-colors hover:text-gray-400 shrink-0" title="Clear filter">
+                <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <path d="M2 2l8 8M10 2l-8 8" />
+                </svg>
+              </button>
+            ) : null}
+          </div>
           <button
             type="button"
             onClick={() => { selectFolder(null); setUnmatchedOnly(false) }}
@@ -252,10 +294,35 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
           </div>
         )}
 
+        {mode === 'playlists' && (
+          <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-surface-border shrink-0">
+            <svg className="w-3 h-3 text-gray-600 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="5" cy="5" r="3.5" />
+              <path d="M8 8l2.5 2.5" />
+            </svg>
+            <input
+              type="text"
+              value={playlistSearch}
+              onChange={(e) => setPlaylistSearch(e.target.value)}
+              placeholder="Search playlists…"
+              className="flex-1 min-w-0 bg-transparent text-[11px] text-gray-300 placeholder-gray-700 outline-none"
+            />
+            {playlistSearch ? (
+              <button type="button" onClick={() => setPlaylistSearch('')} className="text-gray-600 transition-colors hover:text-gray-400 shrink-0" title="Clear search">
+                <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <path d="M2 2l8 8M10 2l-8 8" />
+                </svg>
+              </button>
+            ) : null}
+          </div>
+        )}
+
         {/* List */}
         <div className="overflow-y-auto flex-1 min-h-0">
         {mode === 'folders' ? (
-          watchedFolders.map((folder) => {
+          filteredFolders.length === 0 && folderQuery ? (
+            <p className="px-3 py-3 text-[10px] text-gray-500">No matching folders</p>
+          ) : filteredFolders.map((folder) => {
             const count = files.filter((f) => f.filePath.startsWith(folder.path)).length
             return (
               <div key={folder.id} className="relative group">
@@ -331,7 +398,55 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
         ) : playlists.length === 0 ? (
           <p className="px-3 py-3 text-[10px] text-gray-300">No playlists found</p>
         ) : (
-          playlists.map((playlist) => {
+          <>
+            <div className="flex gap-px px-2 py-1.5 border-b border-surface-border sticky top-0 bg-surface-panel z-10">
+              {(['date', 'name'] as const).map((s, i) => {
+                const active = playlistSort === s
+                const label = s === 'date' ? 'Newest' : 'Name'
+                const dir = active ? playlistSortDir : (s === 'date' ? 'desc' : 'asc')
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => {
+                      if (active) {
+                        setPlaylistSortDir((d) => d === 'asc' ? 'desc' : 'asc')
+                      } else {
+                        setPlaylistSort(s)
+                        setPlaylistSortDir(s === 'date' ? 'desc' : 'asc')
+                      }
+                    }}
+                    className={`flex-1 flex items-center justify-center gap-1 py-0.5 text-[9px] uppercase tracking-wider border transition-colors ${
+                      i === 0 ? 'rounded-l' : 'rounded-r'
+                    } ${
+                      active
+                        ? 'border-accent/50 bg-accent/15 text-accent'
+                        : 'border-surface-border text-gray-600 hover:text-gray-400 hover:bg-surface-hover'
+                    }`}
+                  >
+                    {label}
+                    <svg
+                      className="w-2.5 h-2.5 shrink-0"
+                      viewBox="0 0 10 10"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{ opacity: active ? 1 : 0.3 }}
+                    >
+                      {dir === 'asc'
+                        ? <path d="M2 7l3-4 3 4" />
+                        : <path d="M2 3l3 4 3-4" />
+                      }
+                    </svg>
+                  </button>
+                )
+              })}
+            </div>
+            {filteredPlaylists.length === 0 ? (
+              <p className="px-3 py-3 text-[10px] text-gray-500">No matching playlists</p>
+            ) : filteredPlaylists.map((playlist) => {
             const inLibrary = files.filter(
               (f) => f.mfbTrackId !== null && playlist.trackIds.includes(f.mfbTrackId)
             ).length
@@ -358,7 +473,8 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
                 </span>
               </button>
             )
-          })
+          })}
+          </>
         )}
         </div>
       </div>

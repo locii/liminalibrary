@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.0
+
+- **Sidebar filters** — The Folders and Playlists tabs now have a search box at the top so you can quickly find a folder or playlist by name in a large library.
+- **Playlist sorting** — Sort the playlist list by newest (default) or by name, ascending or descending.
+- **Dismissed matches stay dismissed** — When you reject a pending MFB match for an unmatched track, the dismissal is now remembered. The track no longer keeps reappearing in the auto-indexing queue on every rescan.
+- **Preview already-linked files in pending matches** — When the MFB match panel says "N files already linked to this track", each linked file now has its own play button so you can confirm what's already in your library before linking another copy.
+- **Smarter crossfade detection** — Fade-in detection now uses each track's own peak loudness as the reference instead of a fixed threshold, so quiet ambient intros and loud bang starts both get sensible fade lengths. Adjacent track tails and intros overlap independently so neither gets truncated. Maximum fade-in window raised from 10s to 30s.
+
 ## v0.7.0
 
 - **Apple Music buy button** — Playlist tracks and the Missing Track panel now show a "Buy on Apple Music" button when the MFB database has an Apple Music URL for that track. The button opens the Apple Music app directly (via the `music://` deep-link protocol) and automatically swaps the country segment in the URL to match the user's system locale.

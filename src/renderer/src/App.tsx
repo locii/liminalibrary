@@ -66,7 +66,7 @@ export default function App(): JSX.Element {
       if (cancelledRef.current) return
       if (!useLibraryStore.getState().userAccount) { setIndexing(false); return }
       const state = useLibraryStore.getState()
-      const batch = state.files.filter((f) => !f.mfbIndexed && !state.pendingMatches[f.id]).slice(0, BATCH_SIZE)
+      const batch = state.files.filter((f) => !f.mfbIndexed && !f.mfbMatchRejected && !state.pendingMatches[f.id]).slice(0, BATCH_SIZE)
       if (batch.length === 0) { setIndexing(false); window.electronAPI.mfbClearCatalogue(); return }
 
       setIndexing(true)
