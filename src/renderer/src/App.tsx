@@ -14,6 +14,7 @@ import { SettingsPanel } from './components/SettingsPanel'
 import { ReindexDialog } from './components/ReindexDialog'
 import { loadSettings, saveSettings, applySettings } from './lib/settings'
 import type { AppSettings } from './lib/settings'
+import { syncLibraryToMfb } from './lib/syncLibrary'
 import { useUpdaterStore } from './store/updaterStore'
 
 
@@ -153,6 +154,21 @@ export default function App(): JSX.Element {
   const loginFlash = useLibraryStore((s) => s.loginFlash)
   const setLoginFlash = useLibraryStore((s) => s.setLoginFlash)
   const [catalogueLoaded, setCatalogueLoaded] = useState(false)
+
+  // Sync library to MFB once per session — fires when both auth and catalogue are ready.
+  // Covers app open (session restore) and fresh login.
+  const syncReadyRef = useRef(false)
+  useEffect(() => {
+    if (userAccount && catalogueLoaded && !syncReadyRef.current) {
+      syncReadyRef.current = true
+      syncLibraryToMfb()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userAccount, catalogueLoaded])
+  // Reset on logout so the next login triggers a fresh sync
+  useEffect(() => {
+    if (!userAccount) syncReadyRef.current = false
+  }, [userAccount])
 
   // Load catalogue on mount — mark loaded before subscribing to saves
   useEffect(() => {
@@ -348,7 +364,7 @@ export default function App(): JSX.Element {
               {pendingCount > 0 && (
                 <button
                   type="button"
-                  onClick={applyAllPendingMatches}
+                  onClick={() => { applyAllPendingMatches(); syncLibraryToMfb() }}
                   className="flex items-center gap-1 h-6 px-2.5 text-[10px] font-medium rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
                   title="Apply all pending Music for Breathwork matches"
                 >

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9.0
+
+- **2-way sync with Music for Breathwork** — When you match a local file to a track in the MFB catalogue, the link is now pushed to your MFB account. Matched tracks show an "Owned" badge on track cards, the track detail page, and search results across the website, so you can see at a glance which tracks you already have.
+- **Sync on match & unlink** — Applying or removing a match triggers a sync automatically, so your MFB library stays in step with your local library without any manual action.
+- **Manual sync button** — A "Sync with MFB" button in the Folders panel footer lets you push your full match list on demand. Shows a brief "Synced ✓" confirmation after completing.
+- **Auto-sync on launch** — When you open the app and the catalogue has loaded, your matched tracks are synced to MFB automatically. Re-login also triggers a fresh sync.
+- **Bulk apply now syncs** — "Apply all pending matches" pushes the updated list to MFB in the same action.
+
 ## v0.8.0
 
 - **Sidebar filters** — The Folders and Playlists tabs now have a search box at the top so you can quickly find a folder or playlist by name in a large library.

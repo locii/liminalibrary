@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { pathGuessUpdatesForApply } from '../lib/libraryTrackDisplay'
 import { useLibraryStore } from '../store/libraryStore'
+import { syncLibraryToMfb } from '../lib/syncLibrary'
 import { mfbTrackUrl } from '../types'
 import type { MfbAudioFeatures } from '../types'
 import { WaveformPreview } from './WaveformPreview'
@@ -228,7 +229,7 @@ export function PropertiesPanel(): JSX.Element {
           <div className="flex gap-2 mt-0.5">
             <button
               type="button"
-              onClick={() => applyPendingMatch(file.id)}
+              onClick={() => { applyPendingMatch(file.id); syncLibraryToMfb() }}
               className="flex-1 py-1 text-[11px] rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
             >
               Apply to Track
@@ -398,7 +399,7 @@ export function PropertiesPanel(): JSX.Element {
                 <span className="text-[10px] text-orange-400 mr-0.5">Unlink?</span>
                 <button
                   type="button"
-                  onClick={() => { unlinkMfb(file.id); cancelConfirm() }}
+                  onClick={() => { unlinkMfb(file.id); cancelConfirm(); syncLibraryToMfb() }}
                   title="Confirm unlink"
                   className="px-1.5 h-5 text-[10px] font-medium text-orange-400 hover:text-orange-300 rounded hover:bg-orange-500/15 transition-colors"
                 >

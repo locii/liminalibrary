@@ -19,6 +19,7 @@ import {
 import type { LibraryFile, MfbPlaylistTrack } from '../types'
 import { mfbTrackUrl, phaseColorForTag } from '../types'
 import { useLibraryStore } from '../store/libraryStore'
+import { syncLibraryToMfb } from '../lib/syncLibrary'
 
 const COLUMN_STORAGE_KEY = 'library-file-list-column-widths-v6'
 const GRIP_PX = 8
@@ -703,7 +704,7 @@ export function FileList(): JSX.Element {
                     {pendingMatches[file.id] && (
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); applyPendingMatch(file.id) }}
+                        onClick={(e) => { e.stopPropagation(); applyPendingMatch(file.id); syncLibraryToMfb() }}
                         className="shrink-0 inline-flex justify-center items-center w-[46px] py-px text-[9px] font-medium rounded bg-accent/20 text-accent leading-tight hover:bg-accent/40 transition-colors"
                         title="Click to apply MFB match"
                       >

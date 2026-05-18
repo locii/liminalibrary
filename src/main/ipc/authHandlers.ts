@@ -149,6 +149,12 @@ export function registerAuthHandlers(): void {
     }
   })
 
+  ipcMain.handle('auth:syncLibrary', async (_, trackIds: number[]) => {
+    const token = await loadToken()
+    if (!token) throw new Error('Not authenticated')
+    return apiPost<{ synced: boolean; count: number }>('/library/sync', { track_ids: trackIds }, token)
+  })
+
   ipcMain.handle('auth:getPlaylist', async (_, id: number) => {
     const token = await loadToken()
     if (!token) return null

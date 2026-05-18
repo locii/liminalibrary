@@ -14,7 +14,7 @@ export function AccountButton(): JSX.Element {
   const [loading, setLoading] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  // Restore session on mount
+  // Restore session on mount (no sync — server already has current state)
   useEffect(() => {
     window.electronAPI.authMe().then((user) => {
       if (user) setUserAccount(user)

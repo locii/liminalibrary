@@ -62,6 +62,7 @@ export interface LibraryAPI {
   authMe: () => Promise<{ id: number; name: string; email: string } | null>
   getUserPlaylists: () => Promise<MfbPlaylist[]>
   getPlaylist: (id: number) => Promise<MfbPlaylistDetail | null>
+  syncLibrary: (trackIds: number[]) => Promise<{ synced: boolean; count: number }>
 
   // Limina Studio
   studioSaveSession: (json: string, defaultName: string) => Promise<string | null>

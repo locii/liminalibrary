@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useLibraryStore } from '../store/libraryStore'
+import { syncLibraryToMfb } from '../lib/syncLibrary'
 
 interface Props {
   onClose: () => void
@@ -134,7 +135,7 @@ export function IndexingLog({ onClose, onSelectFile }: Props): JSX.Element {
                         <>
                           <button
                             type="button"
-                            onClick={() => applyPendingMatch(f.id)}
+                            onClick={() => { applyPendingMatch(f.id); syncLibraryToMfb() }}
                             className="px-2 py-0.5 text-[10px] rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
                           >
                             Apply

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLibraryStore } from '../store/libraryStore'
 import { phaseColorForTag } from '../types'
+import { syncLibraryToMfb } from '../lib/syncLibrary'
 
 interface Props {
   onAddFolder: (folderPath?: string) => void
@@ -59,6 +60,9 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
   const [playlistSortDir, setPlaylistSortDir] = useState<'asc' | 'desc'>('desc')
   const [loadingPlaylists, setLoadingPlaylists] = useState(false)
   const [dropWarning, setDropWarning] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncDone, setSyncDone] = useState(false)
+  const syncDoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const watchedFolders = useLibraryStore((s) => s.watchedFolders)
   const selectedFolderId = useLibraryStore((s) => s.selectedFolderId)
@@ -511,6 +515,46 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
               <path d="M6 1.5l2.5-1M6 1.5l1 2.5" />
             </svg>
             Refresh
+          </button>
+        )}
+        {mode === 'folders' && userAccount && matchedFiles > 0 && (
+          <button
+            type="button"
+            disabled={syncing}
+            onClick={async () => {
+              setSyncing(true)
+              setSyncDone(false)
+              await syncLibraryToMfb()
+              setSyncing(false)
+              setSyncDone(true)
+              if (syncDoneTimerRef.current) clearTimeout(syncDoneTimerRef.current)
+              syncDoneTimerRef.current = setTimeout(() => setSyncDone(false), 2500)
+            }}
+            className="w-full flex items-center justify-center gap-1.5 h-6 text-[11px] transition-colors rounded hover:bg-surface-hover disabled:opacity-40 text-accent/70 hover:text-accent"
+          >
+            {syncDone ? (
+              <>
+                <svg className="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M2 6l3 3 5-5" />
+                </svg>
+                Synced
+              </>
+            ) : syncing ? (
+              <>
+                <svg className="w-3 h-3 shrink-0 animate-spin" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <path d="M6 1v2M6 9v2M1 6h2M9 6h2" />
+                </svg>
+                Syncing…
+              </>
+            ) : (
+              <>
+                <svg className="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.5 6A4.5 4.5 0 1 1 6 1.5" />
+                  <path d="M6 1.5l2.5-1M6 1.5l1 2.5" />
+                </svg>
+                Sync with MFB
+              </>
+            )}
           </button>
         )}
         {mode === 'folders' && (
