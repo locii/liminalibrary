@@ -99,8 +99,8 @@ jobs:
           REVALIDATE_TOKEN: ${{ secrets.REVALIDATE_TOKEN }}
         run: |
           if [ -z "$REVALIDATE_TOKEN" ]; then
-            echo "REVALIDATE_TOKEN secret is not set on this repo" >&2
-            exit 1
+            echo "REVALIDATE_TOKEN secret is not set — skipping revalidation"
+            exit 0
           fi
           code=$(curl -s -o /tmp/revalidate.out -w "%{http_code}" \
             -X POST https://www.getliminastudio.com/api/revalidate \
