@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.9.1
+
+- Fixes release pipeline
+
 ## v0.9.0
 
 - **2-way sync with Music for Breathwork** — When you match a local file to a track in the MFB catalogue, the link is now pushed to your MFB account. Matched tracks show an "Owned" badge on track cards, the track detail page, and search results across the website, so you can see at a glance which tracks you already have.
