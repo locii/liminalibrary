@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.1.0
+
+- **Album art throughout the app** — Album artwork from the MFB catalogue now appears in file list rows, the player bar, the properties panel header, playlist panel header and track rows, the missing track panel, and the playlist sidebar. Previously-matched files that predate this feature are back-filled silently on next login.
+- **Folder context menu** — Right-clicking a watched folder now shows a context menu with "Show in Finder" and "Remove Folder", replacing the hover-only × button.
+- **Removed files improvements** — The removed files view now has sortable columns (Name, Artist, Filename) and a play button on each row so you can preview a track before deciding whether to restore it.
+- **Title-based sort in file list** — The Name column sort now uses the MFB track title when available, falling back to the raw filename, so matched tracks sort by their proper names.
+- **Playlist coverage count fix** — The "N / M" count in the playlist sidebar is now deduplicated — owning multiple copies of the same track no longer inflates the count.
+- **Authenticated catalogue fetch** — The MFB catalogue is now fetched with your auth token, and the cache is invalidated on login and logout so the right set of tracks is always shown.
+- **Improved match scoring for "Artist - Title" filenames** — The artist portion of "Artist - Title" filename patterns is now used as a scoring signal, improving match accuracy for files named in that format.
+- **Null-safety fixes** — Defensive checks in the Missing Track panel and Properties panel prevent crashes with certain MFB API responses.
+
 ## v1.0.0
 
 - **Mix Cue Editor — waveform-integrated cue points** — Clip start/end and intro/outro fade markers are now visible directly on the track waveform in the properties panel. A "Set Cue Points" button opens the full Mix Cue Editor from within the waveform display, and each marker is drawn as a coloured line on the preview so you can see exactly where cuts and fades fall.

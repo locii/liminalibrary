@@ -165,6 +165,31 @@ export default function App(): JSX.Element {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userAccount, catalogueLoaded])
+
+  // Back-fill albumImageUrl for matched files that predate the feature.
+  const albumArtFetchedRef = useRef(false)
+  useEffect(() => {
+    if (!userAccount || !catalogueLoaded || albumArtFetchedRef.current) return
+    albumArtFetchedRef.current = true
+    const missing = useLibraryStore.getState().files.filter(
+      (f) => f.mfbTrackId !== null && !f.albumImageUrl
+    )
+    if (missing.length === 0) return
+    ;(async () => {
+      for (const f of missing) {
+        if (!useLibraryStore.getState().userAccount) break
+        try {
+          const data = await window.electronAPI.mfbGetTrack(f.mfbTrackId!) as {
+            album?: { image_url?: string }
+          }
+          if (data?.album?.image_url) {
+            useLibraryStore.getState().updateFile(f.id, { albumImageUrl: data.album.image_url })
+          }
+        } catch { /* ignore per-track failures */ }
+      }
+    })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userAccount, catalogueLoaded])
   // Reset on logout so the next login triggers a fresh sync
   useEffect(() => {
     if (!userAccount) syncReadyRef.current = false

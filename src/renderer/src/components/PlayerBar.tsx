@@ -32,9 +32,16 @@ export function PlayerBar(): JSX.Element | null {
   const previewQueue = useLibraryStore((s) => s.previewQueue)
   const setPreview = useLibraryStore((s) => s.setPreview)
   const files = useLibraryStore((s) => s.files)
+  const removedFiles = useLibraryStore((s) => s.removedFiles)
+  const selectedPlaylistDetail = useLibraryStore((s) => s.selectedPlaylistDetail)
   const updateFile = useLibraryStore((s) => s.updateFile)
 
-  const file = files.find((f) => f.id === previewFileId) ?? null
+  const file = files.find((f) => f.id === previewFileId) ?? removedFiles.find((f) => f.id === previewFileId) ?? null
+
+  const albumImageUrl = file?.albumImageUrl
+    ?? (file?.mfbTrackId != null
+      ? selectedPlaylistDetail?.segments.flatMap((s) => s.tracks).find((t) => t.id === file.mfbTrackId)?.album_image_url
+      : undefined)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -236,7 +243,7 @@ export function PlayerBar(): JSX.Element | null {
       {readyVersion ? (
         <button
           onClick={() => window.electronAPI.quitAndInstall()}
-          className="text-indigo-400 hover:text-indigo-300 cursor-pointer underline underline-offset-2"
+          className="text-indigo-400 underline cursor-pointer hover:text-indigo-300 underline-offset-2"
         >
           Update ready — restart to install
         </button>
@@ -259,7 +266,7 @@ export function PlayerBar(): JSX.Element | null {
           type="button"
           onClick={handleCheckForUpdates}
           title="Check for updates"
-          className="text-gray-600 hover:text-gray-300 cursor-pointer underline underline-offset-2"
+          className="text-gray-600 underline cursor-pointer hover:text-gray-300 underline-offset-2"
         >
           Check for updates
         </button>
@@ -270,7 +277,7 @@ export function PlayerBar(): JSX.Element | null {
 
   if (!file) {
     return (
-      <div className="flex items-center justify-end px-4 h-10 border-t shrink-0 border-surface-border bg-surface-panel">
+      <div className="flex justify-end items-center px-4 h-10 border-t shrink-0 border-surface-border bg-surface-panel">
         {updateBadge}
       </div>
     )
@@ -338,10 +345,15 @@ export function PlayerBar(): JSX.Element | null {
         </button>
       </div>
 
-      {/* Track info */}
-      <div className="flex flex-col justify-center w-36 min-w-0 shrink-0">
-        <span className="text-[11px] text-gray-200 truncate leading-tight">{file.trackTitle || file.fileName}</span>
-        {file.artist && <span className="text-[10px] text-gray-500 truncate leading-tight mt-0.5">{file.artist}</span>}
+      {/* Album art + track info */}
+      <div className="flex gap-2 items-center w-44 min-w-0 shrink-0">
+        {albumImageUrl && (
+          <img src={albumImageUrl} alt="" className="object-cover w-10 h-10 rounded shrink-0" />
+        )}
+        <div className="flex flex-col justify-center min-w-0">
+          <span className="text-[11px] text-gray-200 truncate leading-tight">{file.trackTitle || file.fileName}</span>
+          {file.artist && <span className="text-[10px] text-gray-500 truncate leading-tight mt-0.5">{file.artist}</span>}
+        </div>
       </div>
 
       {/* Waveform */}

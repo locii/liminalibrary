@@ -11,7 +11,7 @@ async function saveToken(token: string): Promise<void> {
   await fs.writeFile(TOKEN_FILE, encrypted)
 }
 
-async function loadToken(): Promise<string | null> {
+export async function loadToken(): Promise<string | null> {
   try {
     const encrypted = await fs.readFile(TOKEN_FILE)
     return safeStorage.decryptString(encrypted)
@@ -141,6 +141,7 @@ export function registerAuthHandlers(): void {
           id: pl['id'] as number,
           title: (pl['title'] ?? pl['name']) as string,
           trackIds: (pl['track_ids'] ?? pl['trackIds'] ?? []) as number[],
+          image_url: (pl['image_url'] ?? pl['cover_image_url'] ?? pl['cover'] ?? pl['thumbnail_url'] ?? undefined) as string | undefined,
         }
       })
     } catch (err) {

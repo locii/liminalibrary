@@ -23,7 +23,7 @@ import { syncLibraryToMfb } from '../lib/syncLibrary'
 
 const COLUMN_STORAGE_KEY = 'library-file-list-column-widths-v6'
 const GRIP_PX = 8
-const ROW_HEIGHT = 28
+const ROW_HEIGHT = 36
 const OVERSCAN = 5
 const TABLE_HORIZONTAL_PADDING = 24 // px-3 each side
 
@@ -186,7 +186,7 @@ function sortFiles(files: LibraryFile[], sorts: SortEntry[]): LibraryFile[] {
       let c = 0
       switch (key) {
         case 'fileName':
-          c = a.fileName.localeCompare(b.fileName, undefined, { sensitivity: 'base' }) * mul
+          c = (a.trackTitle || a.fileName).localeCompare(b.trackTitle || b.fileName, undefined, { sensitivity: 'base' }) * mul
           break
         case 'artist':
           c = artistSortKey(a).localeCompare(artistSortKey(b), undefined, { sensitivity: 'base' }) * mul
@@ -298,6 +298,8 @@ export function FileList(): JSX.Element {
   const previewFileId = useLibraryStore((s) => s.previewFileId)
   const setPreview = useLibraryStore((s) => s.setPreview)
   const removeFiles = useLibraryStore((s) => s.removeFiles)
+  const [removedSort, setRemovedSort] = useState<'name' | 'artist' | 'file'>('name')
+  const [removedSortDir, setRemovedSortDir] = useState<'asc' | 'desc'>('asc')
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const [scrollTop, setScrollTop] = useState(0)
@@ -489,33 +491,89 @@ export function FileList(): JSX.Element {
 
   if (showRemoved) {
     const q = query.trim().toLowerCase()
-    const filteredRemoved = q
+    const filteredRemoved = (q
       ? removedFiles.filter((f) =>
           f.fileName.toLowerCase().includes(q) ||
           f.trackTitle.toLowerCase().includes(q) ||
           f.artist.toLowerCase().includes(q)
         )
       : removedFiles
+    ).slice().sort((a, b) => {
+      let va = '', vb = ''
+      if (removedSort === 'name') { va = (a.trackTitle || a.fileName).toLowerCase(); vb = (b.trackTitle || b.fileName).toLowerCase() }
+      else if (removedSort === 'artist') { va = a.artist.toLowerCase(); vb = b.artist.toLowerCase() }
+      else { va = a.fileName.toLowerCase(); vb = b.fileName.toLowerCase() }
+      const cmp = va.localeCompare(vb)
+      return removedSortDir === 'asc' ? cmp : -cmp
+    })
+
+    function toggleRemovedSort(col: typeof removedSort): void {
+      if (removedSort === col) { setRemovedSortDir((d) => d === 'asc' ? 'desc' : 'asc') }
+      else { setRemovedSort(col); setRemovedSortDir('asc') }
+    }
+
+    function SortArrow({ col }: { col: typeof removedSort }): JSX.Element {
+      const active = removedSort === col
+      return (
+        <svg className="w-2.5 h-2.5 shrink-0 ml-0.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: active ? 1 : 0.25 }}>
+          {removedSortDir === 'asc' || !active ? <path d="M2 7l3-4 3 4" /> : <path d="M2 3l3 4 3-4" />}
+        </svg>
+      )
+    }
+
     return (
       <div className="flex overflow-hidden flex-col flex-1 min-w-0">
         <SearchBar query={query} onChange={setQuery} pendingOnly={pendingOnly} onTogglePending={() => setPendingOnly((v) => !v)} pendingCount={Object.keys(pendingMatches).length} duplicateOnly={duplicateOnly} onToggleDuplicate={() => setDuplicateOnly((v) => !v)} duplicateCount={duplicateIds.size} showRemoved={showRemoved} onToggleRemoved={() => setShowRemoved((v) => !v)} removedCount={removedFiles.length} unmatchedOnly={unmatchedOnly} onToggleUnmatched={() => setUnmatchedOnly((v) => !v)} unmatchedCount={unmatchedCount} />
+        <div className="flex items-center px-3 h-7 border-b border-surface-border text-[10px] uppercase tracking-wider select-none shrink-0">
+          <button type="button" onClick={() => toggleRemovedSort('name')} className={`flex items-center gap-0.5 flex-1 min-w-0 transition-colors ${removedSort === 'name' ? 'text-gray-300' : 'text-gray-600 hover:text-gray-400'}`}>
+            Name <SortArrow col="name" />
+          </button>
+          <button type="button" onClick={() => toggleRemovedSort('artist')} className={`flex items-center gap-0.5 w-[120px] shrink-0 transition-colors ${removedSort === 'artist' ? 'text-gray-300' : 'text-gray-600 hover:text-gray-400'}`}>
+            Artist <SortArrow col="artist" />
+          </button>
+          <button type="button" onClick={() => toggleRemovedSort('file')} className={`flex items-center gap-0.5 w-[120px] shrink-0 transition-colors ${removedSort === 'file' ? 'text-gray-300' : 'text-gray-600 hover:text-gray-400'}`}>
+            Filename <SortArrow col="file" />
+          </button>
+          <div className="w-14 shrink-0" />
+        </div>
         <div className="overflow-y-auto flex-1 min-h-0">
           {filteredRemoved.length === 0 ? (
             <p className="px-4 py-4 text-[11px] text-gray-600">{q ? 'No results' : 'No removed files'}</p>
           ) : (
-            filteredRemoved.map((f) => (
-              <div key={f.id} className="flex gap-2 items-center px-3 border-b border-surface-border/50 group" style={{ height: ROW_HEIGHT }}>
-                <span className="flex-1 min-w-0 text-[11px] text-gray-500 truncate">{f.trackTitle || f.fileName}</span>
-                {f.artist && <span className="text-[10px] text-gray-600 truncate shrink-0 max-w-[100px]">{f.artist}</span>}
-                <button
-                  type="button"
-                  onClick={() => restoreFile(f.id)}
-                  className="shrink-0 px-2 py-px text-[9px] font-medium rounded border border-surface-border text-gray-500 hover:text-gray-200 hover:border-gray-500 transition-colors opacity-0 group-hover:opacity-100"
-                >
-                  Restore
-                </button>
-              </div>
-            ))
+            filteredRemoved.map((f) => {
+              const isPreviewing = previewFileId === f.id
+              return (
+                <div key={f.id} className="flex gap-2 items-center px-3 border-b border-surface-border/50 group" style={{ height: ROW_HEIGHT }}>
+                  <button
+                    type="button"
+                    onClick={() => isPreviewing ? setPreview(null, []) : setPreview(f.id, filteredRemoved.map((r) => r.id))}
+                    className={`shrink-0 w-4 h-4 flex items-center justify-center rounded-full border transition-colors ${isPreviewing ? 'opacity-100 border-accent text-accent' : 'text-gray-600 border-gray-600 opacity-0 hover:border-accent hover:text-accent group-hover:opacity-100'}`}
+                    title={isPreviewing ? 'Stop preview' : 'Preview'}
+                  >
+                    {isPreviewing ? (
+                      <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
+                        <rect x="1.5" y="1" width="2.5" height="8" rx="0.5" />
+                        <rect x="6" y="1" width="2.5" height="8" rx="0.5" />
+                      </svg>
+                    ) : (
+                      <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
+                        <path d="M2 1.5l7 3.5-7 3.5V1.5z" />
+                      </svg>
+                    )}
+                  </button>
+                  <span className="flex-1 min-w-0 text-[11px] text-gray-500 truncate">{f.trackTitle || f.fileName}</span>
+                  <span className="text-[10px] text-gray-600 truncate shrink-0 w-[120px]">{f.artist}</span>
+                  <span className="text-[10px] text-gray-600 truncate shrink-0 w-[120px]">{f.fileName}</span>
+                  <button
+                    type="button"
+                    onClick={() => restoreFile(f.id)}
+                    className="shrink-0 px-2 py-px text-[9px] font-medium rounded border border-surface-border text-gray-500 hover:text-gray-200 hover:border-gray-500 transition-colors opacity-0 group-hover:opacity-100"
+                  >
+                    Restore
+                  </button>
+                </div>
+              )
+            })
           )}
         </div>
       </div>
@@ -649,34 +707,43 @@ export function FileList(): JSX.Element {
                   }}
                 >
                   <div className="flex overflow-hidden gap-2 items-center min-w-0 shrink-0" style={{ width: cw.name }}>
-                    <button
-                      type="button"
-                      onClick={(e: React.MouseEvent) => {
-                        e.stopPropagation()
-                        if (previewFileId === file.id) {
-                          setPreview(null, [])
-                        } else {
-                          setPreview(file.id, files.map((f) => f.id))
-                        }
-                      }}
-                      className={`shrink-0 w-4 h-4 flex items-center justify-center rounded-full border transition-colors ${
-                        previewFileId === file.id
-                          ? 'border-accent text-accent opacity-100'
-                          : 'border-gray-600 text-gray-600 hover:border-accent hover:text-accent opacity-0 group-hover:opacity-100'
-                      }`}
-                      title={previewFileId === file.id ? 'Stop preview' : 'Preview'}
-                    >
-                      {previewFileId === file.id ? (
-                        <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
-                          <rect x="1.5" y="1" width="2.5" height="8" rx="0.5" />
-                          <rect x="6" y="1" width="2.5" height="8" rx="0.5" />
-                        </svg>
-                      ) : (
-                        <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
-                          <path d="M2 1.5l7 3.5-7 3.5V1.5z" />
-                        </svg>
+                    <div className="overflow-hidden relative w-5 h-5 rounded shrink-0">
+                      {file.albumImageUrl && (
+                        <img src={file.albumImageUrl} alt="" className={`object-cover absolute inset-0 w-full h-full transition-opacity ${previewFileId === file.id ? 'opacity-60' : 'opacity-100 group-hover:opacity-60'}`} />
                       )}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={(e: React.MouseEvent) => {
+                          e.stopPropagation()
+                          if (previewFileId === file.id) {
+                            setPreview(null, [])
+                          } else {
+                            setPreview(file.id, files.map((f) => f.id))
+                          }
+                        }}
+                        className={`absolute inset-0 flex items-center justify-center transition-all ${
+                          file.albumImageUrl
+                            ? previewFileId === file.id
+                              ? 'text-white opacity-100'
+                              : 'text-white opacity-0 group-hover:opacity-100'
+                            : previewFileId === file.id
+                              ? 'rounded-full border border-accent text-accent opacity-100'
+                              : 'rounded-full border border-gray-600 text-gray-600 hover:border-accent hover:text-accent opacity-0 group-hover:opacity-100'
+                        }`}
+                        title={previewFileId === file.id ? 'Stop preview' : 'Preview'}
+                      >
+                        {previewFileId === file.id ? (
+                          <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
+                            <rect x="1.5" y="1" width="2.5" height="8" rx="0.5" />
+                            <rect x="6" y="1" width="2.5" height="8" rx="0.5" />
+                          </svg>
+                        ) : (
+                          <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
+                            <path d="M2 1.5l7 3.5-7 3.5V1.5z" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
                     <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-hidden">
                       <span className="text-[11px] truncate shrink min-w-0">
                         {file.trackTitle || file.fileName}
@@ -809,11 +876,15 @@ export function FileList(): JSX.Element {
                 }`}
               >
                 <div className="flex items-center gap-2 flex-1 min-w-[120px] basis-[6rem]">
-                  <div className="flex justify-center items-center w-4 h-4 text-gray-600 rounded-full border border-gray-700 shrink-0">
-                    <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
-                      <path d="M2 1.5l7 3.5-7 3.5V1.5z" />
-                    </svg>
-                  </div>
+                  {track.album_image_url ? (
+                    <img src={track.album_image_url} alt="" className="object-cover w-4 h-4 rounded opacity-60 shrink-0" />
+                  ) : (
+                    <div className="flex justify-center items-center w-4 h-4 text-gray-600 rounded-full border border-gray-700 shrink-0">
+                      <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="currentColor">
+                        <path d="M2 1.5l7 3.5-7 3.5V1.5z" />
+                      </svg>
+                    </div>
+                  )}
                   <span className="text-[11px] truncate min-w-0 flex-1 text-gray-400">{track.title}</span>
                 </div>
                 <GripSpacer />

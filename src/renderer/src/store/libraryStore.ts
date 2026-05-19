@@ -66,6 +66,7 @@ interface LibraryState {
   setUserAccount: (user: UserAccount | null) => void
   setShowLoginModal: (show: boolean) => void
   setPlaylists: (playlists: MfbPlaylist[]) => void
+  patchPlaylist: (id: number, updates: Partial<MfbPlaylist>) => void
   selectPlaylist: (id: number | null) => void
   setPlaylistDetail: (detail: MfbPlaylistDetail | null) => void
   selectMissingTrack: (id: number | null) => void
@@ -127,6 +128,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   setUserAccount: (user) => set({ userAccount: user }),
   setShowLoginModal: (show) => set({ showLoginModal: show }),
   setPlaylists: (playlists) => set({ playlists }),
+  patchPlaylist: (id, updates) => set((s) => ({
+    playlists: s.playlists.map((p) => p.id === id ? { ...p, ...updates } : p),
+  })),
   selectPlaylist: (id) => set({ selectedPlaylistId: id, selectedPlaylistDetail: null, selectedFolderId: null, selectedTags: [], selectedFileId: null, selectedMissingTrackId: null, unmatchedOnly: false }),
   setPlaylistDetail: (detail) => set({ selectedPlaylistDetail: detail }),
   selectMissingTrack: (id) => set({ selectedMissingTrackId: id, selectedFileId: null }),
@@ -251,6 +255,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
               mfbTrackId: match.id,
               mfbApplied: true,
               appliedPathGuess: true,
+              albumImageUrl: match.album.image_url ?? null,
               audioFeatures: match.audio_features ?? null,
               bandcampUrl: match.bandcamp_url ?? null,
               beatportUrl: match.beatport_url ?? null,
@@ -282,6 +287,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       return {
         ...f, artist, album: match.album.title, tags, notes: match.description ?? '',
         trackTitle: match.title, mfbTrackId: match.id, mfbApplied: true, appliedPathGuess: true,
+        albumImageUrl: match.album.image_url ?? null,
         audioFeatures: match.audio_features ?? null,
         bandcampUrl: match.bandcamp_url ?? null,
         beatportUrl: match.beatport_url ?? null,

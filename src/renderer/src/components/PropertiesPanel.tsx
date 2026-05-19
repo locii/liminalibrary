@@ -31,10 +31,10 @@ function formatSize(bytes: number): string {
 
 function SectionHeader({ label, open, onToggle }: { label: string; open: boolean; onToggle: () => void }): JSX.Element {
   return (
-    <button type="button" onClick={onToggle} className="flex items-center justify-between w-full text-left group">
+    <button type="button" onClick={onToggle} className="flex justify-between items-center w-full text-left group">
       <span className="text-[10px] text-gray-400 uppercase tracking-wider">{label}</span>
       <svg
-        className={`w-3 h-3 text-gray-600 group-hover:text-gray-400 transition-all shrink-0 ${open ? '' : '-rotate-90'}`}
+        className={`w-3 h-3 text-gray-600 group-hover:text-gray-400 transition-all shrink-0 ${open ? '':'-rotate-90'}`}
         viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
       >
         <path d="M2 4l4 4 4-4" />
@@ -136,7 +136,13 @@ export function PropertiesPanel(): JSX.Element {
   const previewFileId = useLibraryStore((s) => s.previewFileId)
   const setPreview = useLibraryStore((s) => s.setPreview)
 
+  const selectedPlaylistDetail = useLibraryStore((s) => s.selectedPlaylistDetail)
+
   const file = files.find((f) => f.id === selectedFileId)
+  const albumImageUrl = file?.albumImageUrl
+    ?? (file?.mfbTrackId != null
+      ? selectedPlaylistDetail?.segments.flatMap((s) => s.tracks).find((t) => t.id === file.mfbTrackId)?.album_image_url
+      : undefined)
   const pendingMatch = file ? pendingMatches[file.id] : undefined
   const pendingMatchLinkedFiles = pendingMatch ? files.filter((f) => f.mfbTrackId === pendingMatch.id) : []
   const pendingMatchLinkedCount = pendingMatchLinkedFiles.length
@@ -295,7 +301,7 @@ export function PropertiesPanel(): JSX.Element {
               className={`shrink-0 w-6 h-6 flex items-center justify-center rounded-full border transition-colors disabled:opacity-40 ${
                 m4bPreviewPlaying
                   ? 'border-accent text-accent'
-                  : 'border-gray-600 text-gray-600 hover:border-accent hover:text-accent'
+                  : 'text-gray-600 border-gray-600 hover:border-accent hover:text-accent'
               }`}
             >
               {m4bPreviewLoading ? (
@@ -328,7 +334,10 @@ export function PropertiesPanel(): JSX.Element {
       )}
 
       {/* Track header: name + actions menu */}
-      <div className="flex gap-1 items-center px-3 py-2 min-w-0 border-b border-surface-border shrink-0">
+      <div className="flex gap-4 items-center px-3 py-2 min-w-0 border-b border-surface-border shrink-0">
+        {albumImageUrl && (
+          <img src={albumImageUrl} alt="" className="object-cover w-8 h-8 rounded shrink-0" />
+        )}
         <p className="text-[11px] text-gray-200 font-medium truncate flex-1 min-w-0" title={file.filePath}>
           {file.trackTitle || file.fileName}
         </p>
@@ -368,7 +377,7 @@ export function PropertiesPanel(): JSX.Element {
               type="button"
               onClick={() => setShowMenu((v) => !v)}
               title="More actions"
-              className={`flex justify-center items-center w-6 h-6 rounded transition-colors text-gray-500 hover:text-gray-300 hover:bg-surface-hover ${showMenu ? 'bg-surface-hover text-gray-300' : ''}`}
+              className={`flex justify-center items-center w-6 h-6 rounded transition-colors text-gray-500 hover:text-gray-300 hover:bg-surface-hover ${showMenu ? 'text-gray-300 bg-surface-hover' : ''}`}
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
                 <circle cx="3" cy="8" r="1.25" /><circle cx="8" cy="8" r="1.25" /><circle cx="13" cy="8" r="1.25" />
@@ -414,15 +423,17 @@ export function PropertiesPanel(): JSX.Element {
                             bandcamp_url?: string
                             beatport_url?: string
                           }
-                          const artist = data.artists.map((a) => a.name).join(', ')
-                          const tags = Object.values(data.tags).flat().map((t) => t.name)
-                          const hourSlug = data.tags['Hour']?.[0]?.slug?.en
+                          const tagsData = data.tags ?? {}
+                          const artist = (data.artists ?? []).map((a) => a.name).join(', ')
+                          const tags = Object.values(tagsData).flat().map((t) => t.name)
+                          const hourSlug = tagsData['Hour']?.[0]?.slug?.en
                           updateFile(file.id, {
-                            artist, album: data.album.title, tags,
+                            artist, album: data.album?.title ?? '', tags,
                             notes: data.description ?? '',
                             trackTitle: data.title,
                             mfbApplied: true,
                             appliedPathGuess: true,
+                            albumImageUrl: data.album?.image_url ?? null,
                             audioFeatures: data.audio_features ?? null,
                             bandcampUrl: data.bandcamp_url ?? null,
                             beatportUrl: data.beatport_url ?? null,
@@ -599,7 +610,7 @@ export function PropertiesPanel(): JSX.Element {
 
       {!file.appliedPathGuess && (file.artistPathGuess.trim() || file.albumPathGuess.trim()) && (
         <div className="flex flex-col gap-2 p-3 border-b border-surface-border">
-          <div className="flex items-center justify-between">
+          <div className="flex justify-between items-center">
             <SectionHeader label="From folder layout" open={sections.folderLayout} onToggle={() => toggleSection('folderLayout')} />
             {sections.folderLayout && file.artistPathGuess.trim() && file.albumPathGuess.trim() && !file.appliedPathGuess && (
               <button
@@ -758,7 +769,7 @@ export function PropertiesPanel(): JSX.Element {
       {/* Duplicate MFB match */}
       {duplicates.length > 0 && (
         <div className="flex flex-col gap-2 p-3 border-b border-surface-border">
-          <div className="flex items-center justify-between">
+          <div className="flex justify-between items-center">
             <div className="flex items-center gap-1.5">
               <SectionHeader label="Duplicate Match" open={sections.duplicates} onToggle={() => toggleSection('duplicates')} />
               <span className="text-[10px] text-gray-500">({duplicates.length + 1} files)</span>
@@ -927,7 +938,7 @@ function DupeRow({
           className={`shrink-0 w-4 h-4 flex items-center justify-center rounded-full border transition-colors ${
             isPlaying
               ? 'border-accent text-accent'
-              : 'border-gray-600 text-gray-600 hover:border-accent hover:text-accent'
+              : 'text-gray-600 border-gray-600 hover:border-accent hover:text-accent'
           }`}
           title={isPlaying ? 'Stop preview' : 'Preview'}
         >

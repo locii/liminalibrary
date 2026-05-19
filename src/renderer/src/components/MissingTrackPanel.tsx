@@ -41,10 +41,10 @@ export function MissingTrackPanel(): JSX.Element {
   const filteredFiles = allFiles.filter((f) => {
     if (!q) return true
     return (
-      f.fileName.toLowerCase().includes(q) ||
-      f.artist.toLowerCase().includes(q) ||
-      f.artistPathGuess.toLowerCase().includes(q) ||
-      f.trackTitle.toLowerCase().includes(q)
+      (f.fileName ?? '').toLowerCase().includes(q) ||
+      (f.artist ?? '').toLowerCase().includes(q) ||
+      (f.artistPathGuess ?? '').toLowerCase().includes(q) ||
+      (f.trackTitle ?? '').toLowerCase().includes(q)
     )
   })
 
@@ -108,12 +108,13 @@ export function MissingTrackPanel(): JSX.Element {
         tags: Record<string, { id: number; name: string; slug: { en: string } }[]>
         audio_features?: MfbAudioFeatures
       }
-      const artist = data.artists.map((a) => a.name).join(', ')
-      const tags = Object.values(data.tags).flat().map((t) => t.name)
-      const hourSlug = data.tags['Hour']?.[0]?.slug?.en
+      const tagsData = data.tags ?? {}
+      const artist = (data.artists ?? []).map((a) => a.name).join(', ')
+      const tags = Object.values(tagsData).flat().map((t) => t.name)
+      const hourSlug = tagsData['Hour']?.[0]?.slug?.en
       updateFile(resolvedFileId, {
         artist,
-        album: data.album.title,
+        album: data.album?.title ?? '',
         tags,
         notes: data.description ?? '',
         trackTitle: data.title,
@@ -129,8 +130,8 @@ export function MissingTrackPanel(): JSX.Element {
       setTimeout(() => {
         selectFile(resolvedFileId!)
       }, 800)
-    } catch {
-      // ignore — user can retry
+    } catch (err) {
+      setApplyError(err instanceof Error ? err.message : 'Something went wrong — check your connection and try again.')
     } finally {
       setApplying(false)
     }
@@ -140,7 +141,10 @@ export function MissingTrackPanel(): JSX.Element {
     <div className="flex flex-col w-full h-full border-l border-surface-border bg-surface-panel">
       {/* Header */}
       <div className="flex flex-col gap-2 p-3 border-b border-surface-border shrink-0">
-        <div className="flex items-start gap-1.5">
+        <div className="flex items-start gap-2">
+          {track.album_image_url && (
+            <img src={track.album_image_url} alt="" className="w-10 h-10 rounded object-cover shrink-0" />
+          )}
           <div className="flex flex-col gap-0.5 flex-1 min-w-0">
             <p className="text-[11px] text-gray-200 font-medium leading-snug">{track.title}</p>
             <p className="text-[11px] text-gray-500">{track.artist}</p>

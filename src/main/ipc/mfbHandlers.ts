@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { get } from 'https'
+import { loadToken } from './authHandlers'
 
 const BASE = 'https://musicforbreathwork.com/api'
 
@@ -13,11 +14,14 @@ interface CatalogueTrack {
 
 let catalogueCache: CatalogueTrack[] | null = null
 let catalogueCacheTime = 0
+let catalogueCacheAuthed = false
 const CACHE_TTL_MS = 60 * 60 * 1000 // 1 hour
 
-function fetchJson<T>(url: string): Promise<T> {
+function fetchJson<T>(url: string, token?: string | null): Promise<T> {
   return new Promise((resolve, reject) => {
-    get(url, { headers: { 'Accept': 'application/json', 'User-Agent': 'LiminaLibrary/1.0' } }, (res) => {
+    const headers: Record<string, string> = { 'Accept': 'application/json', 'User-Agent': 'LiminaLibrary/1.0' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    get(url, { headers }, (res) => {
       const chunks: Buffer[] = []
       res.on('data', (c: Buffer) => chunks.push(c))
       res.on('end', () => {
@@ -30,10 +34,16 @@ function fetchJson<T>(url: string): Promise<T> {
 }
 
 async function getCatalogue(): Promise<CatalogueTrack[]> {
-  if (catalogueCache && Date.now() - catalogueCacheTime < CACHE_TTL_MS) return catalogueCache
-  console.log('[mfb] fetching catalogue...')
-  catalogueCache = await fetchJson<CatalogueTrack[]>(`${BASE}/tracks`)
+  const token = await loadToken()
+  const isAuthed = !!token
+  // Bust cache if auth state changed (logged in/out since last fetch)
+  if (catalogueCache && Date.now() - catalogueCacheTime < CACHE_TTL_MS && catalogueCacheAuthed === isAuthed) {
+    return catalogueCache
+  }
+  console.log('[mfb] fetching catalogue...', isAuthed ? '(authenticated)' : '(unauthenticated)')
+  catalogueCache = await fetchJson<CatalogueTrack[]>(`${BASE}/tracks`, token)
   catalogueCacheTime = Date.now()
+  catalogueCacheAuthed = isAuthed
   console.log('[mfb] catalogue loaded:', catalogueCache.length, 'tracks')
   return catalogueCache
 }
@@ -57,7 +67,8 @@ function isNameyFolder(name: string): boolean {
   return true
 }
 
-function normalize(s: string): string {
+function normalize(s: string | null | undefined): string {
+  if (!s) return ''
   return s
     .toLowerCase()
     .replace(/\.[^.]+$/, '')        // strip file extension
@@ -67,7 +78,7 @@ function normalize(s: string): string {
     .trim()
 }
 
-function tokenize(s: string): Set<string> {
+function tokenize(s: string | null | undefined): Set<string> {
   return new Set(
     normalize(s)
       .split(' ')
@@ -91,19 +102,25 @@ interface MatchEntry {
 }
 
 function scoreMatch(entry: MatchEntry, track: CatalogueTrack): number {
-  const fileParts = normalize(entry.filename).split(/\s+-\s+/)
+  // Split the raw filename on " - " before normalizing so the dash isn't stripped first
+  const rawBase = entry.filename.replace(/\.[^.]+$/, '')
+  const rawParts = rawBase.split(/\s+-\s+/)
+  const filenameArtistGuess = rawParts.length >= 2 ? rawParts[0] : ''
+  const filenameTitlePart = rawParts.length >= 2 ? rawParts[rawParts.length - 1] : rawBase
+
   const fileTokens = tokenize(entry.filename)
-  // If filename has "Artist - Title" pattern, try the second part as pure title tokens
-  const titleOnlyTokens = fileParts.length >= 2 ? tokenize(fileParts[fileParts.length - 1]) : fileTokens
+  const titleOnlyTokens = rawParts.length >= 2 ? tokenize(filenameTitlePart) : fileTokens
   const trackTitleTokens = tokenize(track.title)
   const trackArtistTokens = tokenize(track.artist)
   const trackAlbumTokens = tokenize(track.album)
 
   const titleScore = Math.max(jaccard(fileTokens, trackTitleTokens), jaccard(titleOnlyTokens, trackTitleTokens))
 
-  // ID3 artist is always trusted; folder names only count if they look like real names
+  // ID3 artist always trusted; filename "Artist - Title" pattern used as fallback;
+  // folder names only count if they look like real names
   const artistSources = [
     entry.artist,
+    filenameArtistGuess,
     isNameyFolder(entry.folder_artist) ? entry.folder_artist : '',
   ].filter(Boolean)
   const hasArtistContext = artistSources.length > 0
@@ -227,5 +244,6 @@ export function registerMfbHandlers(): void {
   ipcMain.handle('mfb:clearCatalogue', () => {
     catalogueCache = null
     catalogueCacheTime = 0
+    catalogueCacheAuthed = false
   })
 }

@@ -53,6 +53,7 @@ function buildSidebarTags(files: { tags: readonly string[] }[]): [string, number
 export function FolderPanel({ onAddFolder }: Props): JSX.Element {
   const [mode, setMode] = useState<PanelMode>('folders')
   const [isDragOver, setIsDragOver] = useState(false)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; folderId: string } | null>(null)
   const [tagQuery, setTagQuery] = useState('')
   const [folderQuery, setFolderQuery] = useState('')
   const [playlistSearch, setPlaylistSearch] = useState('')
@@ -63,6 +64,17 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
   const [syncing, setSyncing] = useState(false)
   const [syncDone, setSyncDone] = useState(false)
   const syncDoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (!contextMenu) return
+    const close = (): void => setContextMenu(null)
+    window.addEventListener('click', close)
+    window.addEventListener('contextmenu', close)
+    return () => {
+      window.removeEventListener('click', close)
+      window.removeEventListener('contextmenu', close)
+    }
+  }, [contextMenu])
 
   const watchedFolders = useLibraryStore((s) => s.watchedFolders)
   const selectedFolderId = useLibraryStore((s) => s.selectedFolderId)
@@ -329,33 +341,29 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
           ) : filteredFolders.map((folder) => {
             const count = files.filter((f) => f.filePath.startsWith(folder.path)).length
             return (
-              <div key={folder.id} className="relative group">
-                <button
-                  onClick={() => selectFolder(folder.id)}
-                  className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors ${
-                    selectedFolderId === folder.id
-                      ? 'bg-accent/15 text-gray-200'
-                      : 'text-gray-400 hover:bg-surface-hover hover:text-gray-200'
-                  }`}
-                >
-                  <div className="flex gap-2 items-center min-w-0">
-                    <svg className="w-3 h-3 text-gray-600 shrink-0" viewBox="0 0 12 12" fill="currentColor">
-                      <path d="M1 3.5A1.5 1.5 0 012.5 2h2l1.5 1.5H9.5A1.5 1.5 0 0111 5v4A1.5 1.5 0 019.5 10.5h-7A1.5 1.5 0 011 9V3.5z" />
-                    </svg>
-                    <span className="text-[11px] truncate">{folder.label}</span>
-                  </div>
-                  <span className="text-[10px] text-gray-600 tabular-nums shrink-0 ml-1">{count}</span>
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); removeWatchedFolder(folder.id) }}
-                  className="flex absolute right-1 top-1/2 justify-center items-center w-4 h-4 text-gray-600 opacity-0 transition-all -translate-y-1/2 group-hover:opacity-100 hover:text-red-400"
-                  title="Remove folder"
-                >
-                  <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                    <path d="M2 2l8 8M10 2l-8 8" />
+              <button
+                key={folder.id}
+                title={folder.path}
+                onClick={() => selectFolder(folder.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setContextMenu({ x: e.clientX, y: e.clientY, folderId: folder.id })
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors ${
+                  selectedFolderId === folder.id
+                    ? 'bg-accent/15 text-gray-200'
+                    : 'text-gray-400 hover:bg-surface-hover hover:text-gray-200'
+                }`}
+              >
+                <div className="flex gap-2 items-center min-w-0">
+                  <svg className="w-3 h-3 text-gray-600 shrink-0" viewBox="0 0 12 12" fill="currentColor">
+                    <path d="M1 3.5A1.5 1.5 0 012.5 2h2l1.5 1.5H9.5A1.5 1.5 0 0111 5v4A1.5 1.5 0 019.5 10.5h-7A1.5 1.5 0 011 9V3.5z" />
                   </svg>
-                </button>
-              </div>
+                  <span className="text-[11px] truncate">{folder.label}</span>
+                </div>
+                <span className="text-[10px] text-gray-600 tabular-nums shrink-0 ml-1">{count}</span>
+              </button>
             )
           })
         ) : mode === 'tags' ? (
@@ -451,10 +459,11 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
             {filteredPlaylists.length === 0 ? (
               <p className="px-3 py-3 text-[10px] text-gray-500">No matching playlists</p>
             ) : filteredPlaylists.map((playlist) => {
-            const inLibrary = files.filter(
-              (f) => f.mfbTrackId !== null && playlist.trackIds.includes(f.mfbTrackId)
-            ).length
-            const total = playlist.trackIds.length
+            const trackIdSet = new Set(playlist.trackIds)
+            const inLibrary = new Set(
+              files.flatMap((f) => f.mfbTrackId !== null && trackIdSet.has(f.mfbTrackId) ? [f.mfbTrackId] : [])
+            ).size
+            const total = trackIdSet.size
             return (
               <button
                 key={playlist.id}
@@ -467,9 +476,13 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
                 }`}
               >
                 <div className="flex gap-2 items-center min-w-0">
-                  <svg className="w-3 h-3 text-gray-600 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 3h8M1 6h6M1 9h4" />
-                  </svg>
+                  {playlist.image_url ? (
+                    <img src={playlist.image_url} alt="" className="w-4 h-4 rounded shrink-0 object-cover" />
+                  ) : (
+                    <svg className="w-3 h-3 text-gray-600 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 3h8M1 6h6M1 9h4" />
+                    </svg>
+                  )}
                   <span className="text-[11px] truncate">{playlist.title}</span>
                 </div>
                 <span className={`text-[10px] tabular-nums shrink-0 ml-1 ${inLibrary > 0 ? 'text-accent' : 'text-gray-300'}`}>
@@ -530,7 +543,7 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
               if (syncDoneTimerRef.current) clearTimeout(syncDoneTimerRef.current)
               syncDoneTimerRef.current = setTimeout(() => setSyncDone(false), 2500)
             }}
-            className="w-full flex items-center justify-center gap-1.5 h-6 text-[11px] transition-colors rounded hover:bg-surface-hover disabled:opacity-40 text-accent/70 hover:text-accent"
+            className="w-full flex items-center justify-center gap-1.5 h-6 text-[10px] transition-colors rounded hover:bg-surface-hover disabled:opacity-40 text-accent/70 hover:text-accent uppercase"
           >
             {syncDone ? (
               <>
@@ -541,7 +554,7 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
               </>
             ) : syncing ? (
               <>
-                <svg className="w-3 h-3 shrink-0 animate-spin" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <svg className="w-3 h-3 animate-spin shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
                   <path d="M6 1v2M6 9v2M1 6h2M9 6h2" />
                 </svg>
                 Syncing…
@@ -552,7 +565,7 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
                   <path d="M10.5 6A4.5 4.5 0 1 1 6 1.5" />
                   <path d="M6 1.5l2.5-1M6 1.5l1 2.5" />
                 </svg>
-                Sync with MFB
+                Sync with M4B
               </>
             )}
           </button>
@@ -561,13 +574,13 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
           <button
             onClick={() => onAddFolder()}
             disabled={scanning}
-            className="w-full flex items-center justify-center gap-1.5 h-6 text-[11px] text-gray-300 hover:text-gray-300 transition-colors rounded hover:bg-surface-hover"
+            className="w-full flex items-center justify-center gap-1.5 h-6 text-[10px] text-gray-400 hover:text-gray-300 transition-colors rounded hover:bg-surface-hover uppercase"
           >
             {scanning ? (
               <span className="text-accent">Scanning…</span>
             ) : (
               <>
-                <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round">
                   <path d="M6 2v8M2 6h8" />
                 </svg>
                 Add Folder
@@ -576,14 +589,42 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
           </button>
         )}
         {totalFiles > 0 && (
-          <p className="text-center text-[10px] text-gray-600 mt-1">
-            <span className={matchedFiles === totalFiles ? 'text-accent' : 'text-gray-400'}>
+          <p className="text-center text-[10px] text-gray-400 mt-1">
+            <span className={matchedFiles === totalFiles ? 'text-accent' : 'text-gray-200'}>
               {matchedFiles}
             </span>
             <span> / {totalFiles} matched</span>
           </p>
         )}
       </div>
+
+      {contextMenu && (() => {
+        const folder = watchedFolders.find((f) => f.id === contextMenu.folderId)
+        if (!folder) return null
+        return (
+          <div
+            className="fixed z-50 min-w-[160px] rounded border border-surface-border bg-surface-panel shadow-lg py-0.5 text-[11px]"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="w-full px-3 py-1.5 text-left text-gray-300 hover:bg-surface-hover transition-colors"
+              onClick={() => { window.electronAPI.showInFolder(folder.path); setContextMenu(null) }}
+            >
+              Show in Finder
+            </button>
+            <div className="my-0.5 border-t border-surface-border" />
+            <button
+              type="button"
+              className="w-full px-3 py-1.5 text-left text-red-400 hover:bg-surface-hover transition-colors"
+              onClick={() => { removeWatchedFolder(folder.id); setContextMenu(null) }}
+            >
+              Remove Folder
+            </button>
+          </div>
+        )
+      })()}
     </div>
   )
 }

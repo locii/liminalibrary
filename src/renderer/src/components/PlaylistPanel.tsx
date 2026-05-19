@@ -268,6 +268,7 @@ export function PlaylistPanel(): JSX.Element {
   const setPreview = useLibraryStore((s) => s.setPreview)
 
   const setPlaylistDetail = useLibraryStore((s) => s.setPlaylistDetail)
+  const patchPlaylist = useLibraryStore((s) => s.patchPlaylist)
   const detail = useLibraryStore((s) => s.selectedPlaylistDetail)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -281,7 +282,11 @@ export function PlaylistPanel(): JSX.Element {
     setPlaylistDetail(null)
     setLoadingDetail(true)
     window.electronAPI.getPlaylist(selectedPlaylistId)
-      .then((d) => setPlaylistDetail(d))
+      .then((d) => {
+        setPlaylistDetail(d)
+        const firstImage = d?.segments.flatMap((s) => s.tracks).find((t) => t.album_image_url)?.album_image_url
+        if (firstImage) patchPlaylist(selectedPlaylistId, { image_url: firstImage })
+      })
       .finally(() => setLoadingDetail(false))
   }, [selectedPlaylistId])
 
@@ -340,11 +345,47 @@ export function PlaylistPanel(): JSX.Element {
   return (
     <div className="flex overflow-hidden flex-col flex-1 min-w-0">
       {/* Header */}
-      <div className="flex flex-col gap-1 px-4 py-3 border-b shrink-0 border-surface-border bg-surface-panel">
+      <div className="flex gap-3 items-center px-4 py-3 border-b shrink-0 border-surface-border bg-surface-panel">
+        {/* Album art */}
+        {(() => {
+          const imgUrl = allTracks[0]?.album_image_url
+          const isPlayingPlaylist = previewFileId !== null && matchedQueue.includes(previewFileId)
+          return (
+            <div className="overflow-hidden relative w-10 h-10 rounded shrink-0 bg-surface-hover">
+              {imgUrl ? (
+                <img src={imgUrl} alt="" className="object-cover w-full h-full" />
+              ) : (
+                <div className="flex justify-center items-center w-full h-full">
+                  <svg className="w-5 h-5 text-gray-700" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 3h8M1 6h6M1 9h4" />
+                  </svg>
+                </div>
+              )}
+              {matchedQueue.length > 0 && (
+                <button
+                  type="button"
+                  title={isPlayingPlaylist ? 'Stop' : 'Play playlist'}
+                  onClick={() => isPlayingPlaylist ? setPreview(null, []) : setPreview(matchedQueue[0], matchedQueue)}
+                  className={`absolute inset-0 flex items-center justify-center transition-colors ${isPlayingPlaylist ? 'bg-black/60 text-accent' : 'text-white opacity-0 bg-black/0 hover:bg-black/50 hover:opacity-100'}`}
+                >
+                  {isPlayingPlaylist ? (
+                    <svg className="w-4 h-4" viewBox="0 0 10 10" fill="currentColor">
+                      <rect x="1.5" y="1" width="2.5" height="8" rx="0.5" />
+                      <rect x="6" y="1" width="2.5" height="8" rx="0.5" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" viewBox="0 0 10 10" fill="currentColor">
+                      <path d="M2 1.5l7 3.5-7 3.5V1.5z" />
+                    </svg>
+                  )}
+                </button>
+              )}
+            </div>
+          )
+        })()}
+        {/* Title + stats + actions */}
+        <div className="flex flex-col flex-1 gap-1 min-w-0">
         <div className="flex gap-2 items-center">
-          <svg className="w-3.5 h-3.5 text-gray-600 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M1 3h8M1 6h6M1 9h4" />
-          </svg>
           <h2 className="text-[12px] font-semibold text-gray-200 truncate flex-1 min-w-0">{detail.title}</h2>
           <div className="flex items-center gap-1.5 shrink-0">
             <button
@@ -366,22 +407,24 @@ export function PlaylistPanel(): JSX.Element {
             )}
           </div>
         </div>
-        <div className="flex gap-3 items-center pl-5">
-          <span className="text-[10px] text-gray-500 tabular-nums">
-            {matchedCount}/{allTracks.length} tracks
-          </span>
-          {totalDuration > 0 && (
-            <span className="text-[10px] text-gray-600 tabular-nums">{formatDuration(totalDuration)}</span>
-          )}
-          {missingCount > 0 && (
-            <span className="text-[10px] text-gray-600 tabular-nums">{missingCount} missing</span>
-          )}
+          <div className="flex gap-3 items-center">
+            <span className="text-[10px] text-gray-500 tabular-nums">
+              {matchedCount}/{allTracks.length} tracks
+            </span>
+            {totalDuration > 0 && (
+              <span className="text-[10px] text-gray-600 tabular-nums">{formatDuration(totalDuration)}</span>
+            )}
+            {missingCount > 0 && (
+              <span className="text-[10px] text-gray-600 tabular-nums">{missingCount} missing</span>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Column headers */}
       <div className="flex items-center gap-2 px-3 h-7 border-b shrink-0 border-surface-border bg-surface-panel text-[10px] uppercase tracking-wider text-gray-300 select-none">
         <span className="w-5 text-center shrink-0">#</span>
+        <span className="w-7 shrink-0" />
         <span className="flex-1 min-w-0">Title</span>
         <span className="hidden w-28 shrink-0 sm:block">Artist</span>
         <span className="w-10 text-right shrink-0">Dur</span>
@@ -420,31 +463,44 @@ export function PlaylistPanel(): JSX.Element {
                       ? 'hover:bg-surface-hover'
                       : 'opacity-70 hover:opacity-75 hover:bg-surface-hover'
                   }`}
-                  style={{ height: 28 }}
+                  style={{ height: 36 }}
                 >
                   <span className="w-5 shrink-0 text-center text-[10px] text-gray-600 tabular-nums">{i + 1}</span>
 
-                  <button
-                    type="button"
-                    disabled={!file}
-                    onClick={(e) => file && togglePreview(file.id, e)}
-                    className={`shrink-0 w-4 h-4 flex items-center justify-center rounded-full border transition-colors ${
-                      isPlaying
-                        ? 'border-accent text-accent'
-                        : 'text-gray-600 border-gray-700 opacity-0 hover:border-accent hover:text-accent group-hover:opacity-100'
-                    } ${!file ? 'invisible pointer-events-none' : ''}`}
-                  >
-                    {isPlaying ? (
-                      <svg className="w-2 h-2" viewBox="0 0 8 8" fill="currentColor">
-                        <rect x="0.5" y="0" width="2.5" height="8" rx="0.5" />
-                        <rect x="5" y="0" width="2.5" height="8" rx="0.5" />
-                      </svg>
+                  {/* Album thumbnail with play overlay */}
+                  <div className="overflow-hidden relative w-5 h-5 rounded shrink-0 bg-surface-hover">
+                    {track.album_image_url ? (
+                      <img src={track.album_image_url} alt="" className={`object-cover w-full h-full transition-opacity ${isPlaying ? 'opacity-60' : 'opacity-100 group-hover:opacity-60'}`} />
                     ) : (
-                      <svg className="w-2 h-2" viewBox="0 0 8 8" fill="currentColor">
-                        <path d="M1.5 1l5.5 3-5.5 3V1z" />
-                      </svg>
+                      <div className="w-full h-full" />
                     )}
-                  </button>
+                    {file && (
+                      <button
+                        type="button"
+                        onClick={(e) => togglePreview(file.id, e)}
+                        className={`absolute inset-0 flex items-center justify-center transition-all ${
+                          track.album_image_url
+                            ? isPlaying
+                              ? 'text-white opacity-100'
+                              : 'text-white opacity-0 group-hover:opacity-100'
+                            : isPlaying
+                              ? 'rounded-full border border-accent text-accent opacity-100'
+                              : 'rounded-full border border-gray-600 text-gray-600 hover:border-accent hover:text-accent opacity-0 group-hover:opacity-100'
+                        }`}
+                      >
+                        {isPlaying ? (
+                          <svg className="w-2.5 h-2.5" viewBox="0 0 8 8" fill="currentColor">
+                            <rect x="0.5" y="0" width="2.5" height="8" rx="0.5" />
+                            <rect x="5" y="0" width="2.5" height="8" rx="0.5" />
+                          </svg>
+                        ) : (
+                          <svg className="w-2.5 h-2.5" viewBox="0 0 8 8" fill="currentColor">
+                            <path d="M1.5 1l5.5 3-5.5 3V1z" />
+                          </svg>
+                        )}
+                      </button>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-hidden">
                     <span className={`text-[11px] truncate shrink min-w-0 ${isSelected ? 'text-gray-100' : file ? 'text-gray-300' : 'text-gray-500'}`}>

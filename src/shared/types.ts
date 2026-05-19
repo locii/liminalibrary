@@ -82,6 +82,7 @@ export interface LibraryFile {
   mfbApplied: boolean  // whether an MFB match was applied to this track
   mfbMatchRejected: boolean  // user dismissed a pending match; skip auto re-indexing
   audioFeatures: MfbAudioFeatures | null
+  albumImageUrl: string | null
   bandcampUrl: string | null
   beatportUrl: string | null
   appleMusicUrl: string | null
@@ -163,6 +164,7 @@ export interface MfbPlaylist {
   id: number
   title: string
   trackIds: number[]
+  image_url?: string
 }
 
 /** Full playlist detail returned by /user/playlists/:id */
