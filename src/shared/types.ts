@@ -85,6 +85,12 @@ export interface LibraryFile {
   bandcampUrl: string | null
   beatportUrl: string | null
   appleMusicUrl: string | null
+  introEndMs: number | null       // ms from start where intro ends; null = auto-detect on export
+  outroStartMs: number | null     // ms from start where outro begins; null = auto-detect on export
+  fadeInCurve: number   // 0 = cut, 0.5 = linear, 1.0 = exponential
+  fadeOutCurve: number
+  clipStartMs: number | null      // ms from file start where clip begins; null = file start
+  clipEndMs: number | null        // ms from file start where clip ends; null = file end
 }
 
 export interface MfbTag { id: number; name: string; slug: { en: string } }

@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.0.0
+
+- **Mix Cue Editor — waveform-integrated cue points** — Clip start/end and intro/outro fade markers are now visible directly on the track waveform in the properties panel. A "Set Cue Points" button opens the full Mix Cue Editor from within the waveform display, and each marker is drawn as a coloured line on the preview so you can see exactly where cuts and fades fall.
+- **Power-law fade curves matching Limina Mix** — Fade shapes in the Mix Cue Editor now use the same power-law formula as Limina Mix (exponent = 4^−curve, range −1 to 1). The curve is controlled by dragging the handle on the waveform: drag horizontally to adjust the fade length, drag vertically to change the curve shape. The result exported to a Limina Studio session is numerically identical to what you'd set inside Limina Mix.
+- **Progress colouring in the Mix Cue Editor** — The waveform in the cue editor is now coloured with the track's accent colour, split at the playhead to show played vs. unplayed, matching the style of the main waveform preview.
+- **Click-to-seek** — Clicking anywhere on the Mix Cue Editor waveform (without dragging) seeks playback to that position.
+- **Limina Studio export fixes** — Tracks with clip cue points now export with the correct full-file duration so Limina Studio trims them accurately; previously a clipped track would play for only a second or two. Crossfade timing has also been corrected so the incoming track's fade-in ends exactly where the outgoing track's fade-out ends, and the first track in a playlist can now carry a fade-in.
+
 ## v0.9.1
 
 - Fixes release pipeline

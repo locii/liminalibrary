@@ -7,6 +7,11 @@ interface Props {
   duration: number
   peaks: number[]
   sampleRate?: number
+  clipStartMs?: number | null
+  clipEndMs?: number | null
+  introEndMs?: number | null
+  outroStartMs?: number | null
+  onSetCuePoints?: () => void
 }
 
 const WAVEFORM_COLORS: [string, string][] = [
@@ -22,7 +27,7 @@ const WAVEFORM_COLORS: [string, string][] = [
   ['#0ea5e9', '#38bdf8'], // sky
 ]
 
-function pickColor(fileId: string): [string, string] {
+export function pickColor(fileId: string): [string, string] {
   const hash = fileId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
   return WAVEFORM_COLORS[hash % WAVEFORM_COLORS.length]
 }
@@ -33,7 +38,7 @@ function formatTime(s: number): string {
   return `${m}:${String(sec).padStart(2, '0')}`
 }
 
-export function WaveformPreview({ fileId, filePath, duration, peaks, sampleRate }: Props): JSX.Element {
+export function WaveformPreview({ fileId, filePath, duration, peaks, sampleRate, clipStartMs, clipEndMs, introEndMs, outroStartMs, onSetCuePoints }: Props): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const rafRef = useRef<number | null>(null)
@@ -136,7 +141,25 @@ export function WaveformPreview({ fileId, filePath, duration, peaks, sampleRate 
       ctx.fillStyle = colorHead
       ctx.fillRect(Math.round(splitX) - 0.5, 0, 1, h)
     }
-  }, [peaks, currentTime, duration, fileId, canvasWidth])
+
+    // Cue markers
+    const drawCueLine = (timeMs: number, color: string): void => {
+      if (duration === 0) return
+      const x = Math.round((timeMs / 1000 / duration) * w)
+      if (x < 0 || x > w) return
+      ctx.strokeStyle = color
+      ctx.lineWidth = 1.5
+      ctx.setLineDash([])
+      ctx.beginPath()
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x, h)
+      ctx.stroke()
+    }
+    if (clipStartMs != null) drawCueLine(clipStartMs, '#60a5fa')
+    if (clipEndMs != null) drawCueLine(clipEndMs, '#a78bfa')
+    if (introEndMs != null) drawCueLine(introEndMs, '#14b8a6')
+    if (outroStartMs != null) drawCueLine(outroStartMs, '#f97316')
+  }, [peaks, currentTime, duration, fileId, canvasWidth, clipStartMs, clipEndMs, introEndMs, outroStartMs])
 
   // Stop when table preview starts
   useEffect(() => {
@@ -206,6 +229,15 @@ export function WaveformPreview({ fileId, filePath, duration, peaks, sampleRate 
         </span>
         {loadingPeaks && (
           <span className="ml-auto text-[10px] text-gray-500">Loading waveform…</span>
+        )}
+        {onSetCuePoints && (
+          <button
+            type="button"
+            onClick={onSetCuePoints}
+            className="ml-auto text-[10px] text-gray-500 hover:text-gray-200 transition-colors"
+          >
+            Set Cue Points
+          </button>
         )}
       </div>
     </div>

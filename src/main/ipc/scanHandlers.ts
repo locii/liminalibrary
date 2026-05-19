@@ -108,6 +108,13 @@ export function registerScanHandlers(): void {
             bandcampUrl: null,
             beatportUrl: null,
             appleMusicUrl: null,
+            mfbMatchRejected: false,
+            introEndMs: null,
+            outroStartMs: null,
+            fadeInCurve: 0,
+            fadeOutCurve: 0,
+            clipStartMs: null,
+            clipEndMs: null,
           })
         } catch (e) {
           errors.push(`${filePath}: ${e}`)
@@ -250,6 +257,13 @@ export function registerScanHandlers(): void {
         bandcampUrl: null,
         beatportUrl: null,
         appleMusicUrl: null,
+        mfbMatchRejected: false,
+        introEndMs: null,
+        outroStartMs: null,
+        fadeInCurve: 0,
+        fadeOutCurve: 0,
+        clipStartMs: null,
+        clipEndMs: null,
       }
       // 0-byte files (e.g. Dropbox cloud-only placeholders) can't be parsed —
       // return the stub so MFB data can still be linked; metadata fills in on rescan.

@@ -9,6 +9,25 @@ export function registerAudioHandlers(): void {
       return extractPeaks(filePath, numPeaks)
     }
   )
+
+  ipcMain.handle('audio:getFileDuration', async (_, filePath: string): Promise<number> => {
+    return new Promise((resolve) => {
+      const bin = (ffmpegPath as string).replace('app.asar', 'app.asar.unpacked')
+      if (!bin) { resolve(0); return }
+      // Resample to 8kHz mono and count raw output bytes — bypasses any WAV header size bugs.
+      // Duration = (16-bit samples at 8000 Hz) = byteCount / 2 / 8000
+      const proc = spawn(bin, [
+        '-v', 'quiet', '-i', filePath,
+        '-ac', '1', '-filter:a', 'aresample=8000',
+        '-map', '0:a', '-c:a', 'pcm_s16le', '-f', 's16le', 'pipe:1',
+      ])
+      let byteCount = 0
+      proc.stdout.on('data', (c: Buffer) => { byteCount += c.byteLength })
+      proc.stderr.on('data', () => {})
+      proc.on('error', () => resolve(0))
+      proc.on('close', () => resolve(byteCount / 2 / 8000))
+    })
+  })
 }
 
 function extractPeaks(filePath: string, numPeaks: number): Promise<number[]> {

@@ -124,7 +124,27 @@ async function buildLiminaSession(detail: MfbPlaylistDetail, files: LibraryFile[
     .filter((f): f is LibraryFile => f !== undefined)
 
   const port = await window.electronAPI.getAudioServerPort()
-  const analyses = await Promise.all(orderedFiles.map((f) => analyzeTransitions(f.filePath, f.sampleRate, port)))
+
+  // Get true durations via ffmpeg for all files — bypasses wrong WAV RIFF header sizes.
+  // Run in parallel with waveform analyses.
+  const [trueDurations, analyses] = await Promise.all([
+    Promise.all(orderedFiles.map((f) =>
+      window.electronAPI.getFileDuration(f.filePath).then((d) => d > 0 ? d : f.duration)
+    )),
+    Promise.all(
+      orderedFiles.map((f) => {
+        if (f.introEndMs != null && f.outroStartMs != null) {
+          const clipStartMs = f.clipStartMs ?? 0
+          const clipEndMs = f.clipEndMs ?? Math.round(f.duration * 1000)
+          return Promise.resolve({
+            fadeIn: (f.introEndMs - clipStartMs) / 1000,
+            fadeOut: (clipEndMs - f.outroStartMs) / 1000,
+          })
+        }
+        return analyzeTransitions(f.filePath, f.sampleRate, port)
+      })
+    ),
+  ])
 
   const trackAId = crypto.randomUUID()
   const trackBId = crypto.randomUUID()
@@ -136,7 +156,7 @@ async function buildLiminaSession(detail: MfbPlaylistDetail, files: LibraryFile[
 
   let clipIndex = 0
   let cursor = 0
-  let isFirstClip = true
+
   const clips: object[] = []
   const segments: object[] = []
 
@@ -148,42 +168,71 @@ async function buildLiminaSession(detail: MfbPlaylistDetail, files: LibraryFile[
       const file = fileByMfbId.get(track.id)
       if (!file) continue
       const analysis = analyses[clipIndex] ?? { fadeIn: 3, fadeOut: 8 }
+      // ffmpeg-measured duration is authoritative — catalogue duration can be wrong for some WAV formats
+      const trueDuration = trueDurations[clipIndex] ?? file.duration
 
-      const fadeOut = Math.min(analysis.fadeOut, file.duration * 0.5)
-      // fadeIn is the detected intro length — used as-is so volume hits 100% when content starts
-      const fadeIn = isFirstClip ? 0 : Math.min(analysis.fadeIn, file.duration * 0.5)
+      // Clip trim bounds clamped to true audio duration
+      const clipStartMs = file.clipStartMs ?? 0
+      const clipEndMs = file.clipEndMs ?? Math.round(trueDuration * 1000)
+      const clipStartS = Math.min(clipStartMs / 1000, trueDuration)
+      const clipEndS = Math.min(clipEndMs / 1000, trueDuration)
+      const effectiveDuration = Math.max(0.1, clipEndS - clipStartS)
 
-      // Overlap = whichever is longer: this track's tail or the next track's intro.
-      // This lets both fade independently without truncating either.
+      // Manual cues take priority over waveform analysis (relative to clip bounds)
+      const rawFadeIn = file.introEndMs != null
+        ? Math.max(0, (file.introEndMs - clipStartMs) / 1000)
+        : analysis.fadeIn
+      const rawFadeOut = file.outroStartMs != null
+        ? Math.max(0, (clipEndMs - file.outroStartMs) / 1000)
+        : analysis.fadeOut
+
+      const fadeOut = Math.min(rawFadeOut, effectiveDuration * 0.5)
+      const fadeIn = Math.min(rawFadeIn, effectiveDuration * 0.5)
+
       const nextFile = orderedFiles[clipIndex + 1] ?? null
       const nextAnalysis = nextFile ? (analyses[clipIndex + 1] ?? null) : null
-      const nextFadeIn = nextAnalysis ? Math.min(nextAnalysis.fadeIn, nextFile!.duration * 0.5) : 0
-      const overlap = Math.min(Math.max(fadeOut, nextFadeIn), file.duration * 0.5)
+      const nextTrueDuration = (trueDurations[clipIndex + 1] ?? nextFile?.duration) ?? 0
+      const nextClipStartMs = nextFile?.clipStartMs ?? 0
+      const nextClipEndMs = nextFile
+        ? Math.min(nextFile.clipEndMs ?? Math.round(nextTrueDuration * 1000), Math.round(nextTrueDuration * 1000))
+        : 0
+      const nextRawFadeIn = nextFile?.introEndMs != null
+        ? Math.max(0, (nextFile.introEndMs - nextClipStartMs) / 1000)
+        : (nextAnalysis?.fadeIn ?? 0)
+      const nextEffectiveDuration = nextFile
+        ? Math.max(0.1, (nextClipEndMs - nextClipStartMs) / 1000)
+        : 0
+      // Cap nextFadeIn against both the next clip's duration and this clip's remaining playable time
+      const nextFadeIn = nextFile
+        ? Math.min(nextRawFadeIn, nextEffectiveDuration * 0.5, effectiveDuration * 0.5)
+        : 0
+
+      const fadeInCurveVal = file.fadeInCurve
+      const fadeOutCurveVal = file.fadeOutCurve
 
       const startTime = cursor
-      segLastClipEnd = startTime + file.duration
+      segLastClipEnd = startTime + effectiveDuration
       clips.push({
         id: crypto.randomUUID(),
         trackId: clipIndex % 2 === 0 ? trackAId : trackBId,
         filePath: file.filePath,
         fileName: file.fileName.replace(/\.[^.]+$/, ''),
         startTime,
-        duration: file.duration,
-        trimStart: 0,
-        trimEnd: 0,
+        duration: trueDuration,
+        trimStart: clipStartS,
+        trimEnd: trueDuration - clipEndS,
         fadeIn,
-        fadeOut: overlap,  // extend fade-out to cover the full crossfade window
-        fadeInCurve: 0.5,
-        fadeOutCurve: 0.5,
+        fadeOut,
+        fadeInCurve: fadeInCurveVal,
+        fadeOutCurve: fadeOutCurveVal,
         crossfadeIn: 0,
         crossfadeOut: 0,
         volume: 1,
         automation: [],
       })
 
-      // Start next clip early enough for both fades to complete
-      cursor = startTime + file.duration - overlap
-      isFirstClip = false
+      // Position next clip so its fade-in ends exactly when this clip ends
+      cursor = startTime + effectiveDuration - nextFadeIn
       clipIndex++
     }
 
@@ -304,7 +353,7 @@ export function PlaylistPanel(): JSX.Element {
               onClick={handleCreateSession}
               className="px-2 py-0.5 text-[10px] rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
             >
-              {saving ? 'Creating…' : 'Create in Limina Mix'}
+              {saving ? 'Creating…' : savedPath ? 'New Version' : 'Create in Limina Mix'}
             </button>
             {savedPath && (
               <button

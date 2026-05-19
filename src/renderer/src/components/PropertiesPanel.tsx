@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { pathGuessUpdatesForApply } from '../lib/libraryTrackDisplay'
 import { useLibraryStore } from '../store/libraryStore'
 import { syncLibraryToMfb } from '../lib/syncLibrary'
@@ -6,6 +6,14 @@ import { mfbTrackUrl } from '../types'
 import type { MfbAudioFeatures } from '../types'
 import { WaveformPreview } from './WaveformPreview'
 import { TrackLookup } from './TrackLookup'
+import { MixCueEditorModal } from './MixCueEditorModal'
+
+function formatMs(ms: number): string {
+  const s = ms / 1000
+  const m = Math.floor(s / 60)
+  const sec = (s % 60).toFixed(1)
+  return `${m}:${sec.padStart(4, '0')}`
+}
 
 function formatDuration(seconds: number): string {
   if (!seconds) return '—'
@@ -19,6 +27,20 @@ function formatDuration(seconds: number): string {
 function formatSize(bytes: number): string {
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`
   return `${(bytes / 1_000).toFixed(0)} KB`
+}
+
+function SectionHeader({ label, open, onToggle }: { label: string; open: boolean; onToggle: () => void }): JSX.Element {
+  return (
+    <button type="button" onClick={onToggle} className="flex items-center justify-between w-full text-left group">
+      <span className="text-[10px] text-gray-400 uppercase tracking-wider">{label}</span>
+      <svg
+        className={`w-3 h-3 text-gray-600 group-hover:text-gray-400 transition-all shrink-0 ${open ? '' : '-rotate-90'}`}
+        viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+      >
+        <path d="M2 4l4 4 4-4" />
+      </svg>
+    </button>
+  )
 }
 
 function Row({ label, value }: { label: string; value: string }): JSX.Element {
@@ -80,7 +102,23 @@ export function PropertiesPanel(): JSX.Element {
   const pendingMatches = useLibraryStore((s) => s.pendingMatches)
   const applyPendingMatch = useLibraryStore((s) => s.applyPendingMatch)
   const clearPendingMatch = useLibraryStore((s) => s.clearPendingMatch)
+  const userAccount = useLibraryStore((s) => s.userAccount)
 
+  const [sections, setSections] = useState({
+    info: true,
+    folderLayout: true,
+    tags: true,
+    audioFeatures: true,
+    buy: true,
+    duplicates: true,
+    notes: true,
+    mixCues: false,
+  })
+  function toggleSection(key: keyof typeof sections): void {
+    setSections((s) => ({ ...s, [key]: !s[key] }))
+  }
+
+  const [showMixCueEditor, setShowMixCueEditor] = useState(false)
   const [copied, setCopied] = useState(false)
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [rescanning, setRescanning] = useState(false)
@@ -89,6 +127,8 @@ export function PropertiesPanel(): JSX.Element {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmUnlink, setConfirmUnlink] = useState(false)
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [showMenu, setShowMenu] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
   const m4bAudioRef = useRef<HTMLAudioElement | null>(null)
   const [m4bPreviewPlaying, setM4bPreviewPlaying] = useState(false)
   const [m4bPreviewLoading, setM4bPreviewLoading] = useState(false)
@@ -107,12 +147,25 @@ export function PropertiesPanel(): JSX.Element {
   useEffect(() => {
     setConfirmDelete(false)
     setConfirmUnlink(false)
+    setShowMenu(false)
     if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current)
     m4bAudioRef.current?.pause()
     m4bAudioRef.current = null
     setM4bPreviewPlaying(false)
     setM4bPreviewLoading(false)
   }, [selectedFileId])
+
+  const handleMenuClickOutside = useCallback((e: MouseEvent) => {
+    if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      setShowMenu(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (showMenu) document.addEventListener('mousedown', handleMenuClickOutside)
+    else document.removeEventListener('mousedown', handleMenuClickOutside)
+    return () => document.removeEventListener('mousedown', handleMenuClickOutside)
+  }, [showMenu, handleMenuClickOutside])
 
   async function toggleM4bPreview(): Promise<void> {
     if (m4bPreviewPlaying || m4bAudioRef.current) {
@@ -274,159 +327,163 @@ export function PropertiesPanel(): JSX.Element {
         </div>
       )}
 
-      {/* Track header: name + action icons */}
+      {/* Track header: name + actions menu */}
       <div className="flex gap-1 items-center px-3 py-2 min-w-0 border-b border-surface-border shrink-0">
         <p className="text-[11px] text-gray-200 font-medium truncate flex-1 min-w-0" title={file.filePath}>
           {file.trackTitle || file.fileName}
         </p>
 
-        {/* Copy file */}
-        <button
-          type="button"
-          onClick={async () => {
-            await window.electronAPI.copyFile(file.filePath)
-            if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
-            setCopied(true)
-            copyTimerRef.current = setTimeout(() => setCopied(false), 3000)
-          }}
-          title="Copy file to clipboard"
-          className="flex justify-center items-center w-6 h-6 text-gray-500 rounded transition-colors shrink-0 hover:text-gray-300 hover:bg-surface-hover"
-        >
-          <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="5.5" y="5.5" width="8.5" height="8.5" rx="1.5" />
-            <path d="M10.5 5.5V3.5A1.5 1.5 0 0 0 9 2H3.5A1.5 1.5 0 0 0 2 3.5V9A1.5 1.5 0 0 0 3.5 10.5H5.5" />
-          </svg>
-        </button>
-
-        {/* Remove from library — requires confirm */}
-        {confirmDelete ? (
+        {/* Confirm overlays */}
+        {confirmDelete && (
           <div className="flex items-center gap-0.5 shrink-0">
             <span className="text-[10px] text-red-400 mr-0.5">Remove?</span>
-            <button
-              type="button"
-              onClick={() => removeFile(file.id)}
-              title="Confirm removal"
-              className="px-1.5 h-5 text-[10px] font-medium text-red-400 hover:text-red-300 rounded hover:bg-red-500/15 transition-colors"
-            >
+            <button type="button" onClick={() => removeFile(file.id)}
+              className="px-1.5 h-5 text-[10px] font-medium text-red-400 hover:text-red-300 rounded hover:bg-red-500/15 transition-colors">
               Yes
             </button>
-            <button
-              type="button"
-              onClick={cancelConfirm}
-              title="Cancel"
-              className="px-1.5 h-5 text-[10px] text-gray-400 hover:text-gray-300 rounded hover:bg-surface-hover transition-colors"
-            >
+            <button type="button" onClick={cancelConfirm}
+              className="px-1.5 h-5 text-[10px] text-gray-400 hover:text-gray-300 rounded hover:bg-surface-hover transition-colors">
               No
             </button>
           </div>
-        ) : (
-          <button
-            type="button"
-            onClick={armConfirmDelete}
-            title="Remove from library"
-            className="flex justify-center items-center w-6 h-6 text-gray-500 rounded transition-colors shrink-0 hover:text-red-400 hover:bg-surface-hover"
-          >
-            <svg className="w-5 h-5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 5h10M6 5V3.5h4V5M5 5v7.5h6V5H5zM7 8v2.5M9 8v2.5" />
-            </svg>
-          </button>
+        )}
+        {confirmUnlink && (
+          <div className="flex items-center gap-0.5 shrink-0">
+            <span className="text-[10px] text-orange-400 mr-0.5">Unlink?</span>
+            <button type="button" onClick={() => { unlinkMfb(file.id); cancelConfirm(); syncLibraryToMfb() }}
+              className="px-1.5 h-5 text-[10px] font-medium text-orange-400 hover:text-orange-300 rounded hover:bg-orange-500/15 transition-colors">
+              Yes
+            </button>
+            <button type="button" onClick={cancelConfirm}
+              className="px-1.5 h-5 text-[10px] text-gray-400 hover:text-gray-300 rounded hover:bg-surface-hover transition-colors">
+              No
+            </button>
+          </div>
         )}
 
-        {file.mfbTrackId && (
-          <>
-            {/* Re-fetch from MFB */}
+        {/* Ellipsis menu */}
+        {!confirmDelete && !confirmUnlink && (
+          <div className="relative shrink-0" ref={menuRef}>
             <button
               type="button"
-              disabled={rescanning}
-              onClick={async () => {
-                if (!file.mfbTrackId) return
-                setRescanning(true)
-                try {
-                  const data = (await window.electronAPI.mfbGetTrack(file.mfbTrackId)) as {
-                    id: number; title: string; description: string
-                    artists: { id: number; name: string }[]
-                    album: { id: number; title: string; image_url: string }
-                    tags: Record<string, { id: number; name: string; slug: { en: string } }[]>
-                    audio_features?: MfbAudioFeatures
-                    bandcamp_url?: string
-                    beatport_url?: string
-                  }
-                  const artist = data.artists.map((a) => a.name).join(', ')
-                  const tags = Object.values(data.tags).flat().map((t) => t.name)
-                  const hourSlug = data.tags['Hour']?.[0]?.slug?.en
-                  updateFile(file.id, {
-                    artist, album: data.album.title, tags,
-                    notes: data.description ?? '',
-                    trackTitle: data.title,
-                    mfbApplied: true,
-                    appliedPathGuess: true,
-                    audioFeatures: data.audio_features ?? null,
-                    bandcampUrl: data.bandcamp_url ?? null,
-                    beatportUrl: data.beatport_url ?? null,
-                    ...(hourSlug ? { breathworkPhase: hourSlug as import('../types').BreathworkPhase } : {}),
-                  })
-                  if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
-                  setRefreshed(true)
-                  refreshTimerRef.current = setTimeout(() => setRefreshed(false), 3000)
-                } catch { /* ignore */ } finally {
-                  setRescanning(false)
-                }
-              }}
-              title="Re-fetch data from Music for Breathwork"
-              className="flex justify-center items-center w-6 h-6 text-gray-500 rounded transition-colors shrink-0 hover:text-accent hover:bg-surface-hover disabled:opacity-40"
+              onClick={() => setShowMenu((v) => !v)}
+              title="More actions"
+              className={`flex justify-center items-center w-6 h-6 rounded transition-colors text-gray-500 hover:text-gray-300 hover:bg-surface-hover ${showMenu ? 'bg-surface-hover text-gray-300' : ''}`}
             >
-              <svg className={`w-3.5 h-3.5 ${rescanning ? 'animate-spin' : ''}`} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5" />
-                <path d="M8 2.5l3-1.5M8 2.5l1.5 3" />
+              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
+                <circle cx="3" cy="8" r="1.25" /><circle cx="8" cy="8" r="1.25" /><circle cx="13" cy="8" r="1.25" />
               </svg>
             </button>
 
-            {/* Open on MFB site */}
-            <button
-              type="button"
-              onClick={() => window.open(mfbTrackUrl(file.mfbTrackId!, file.trackTitle || String(file.mfbTrackId)))}
-              title="View on Music for Breathwork website"
-              className="flex justify-center items-center w-6 h-6 text-gray-500 rounded transition-colors shrink-0 hover:text-accent hover:bg-surface-hover"
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M7 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8A1.5 1.5 0 0 0 13 12.5V9M9.5 2H14v4.5M14 2L7.5 8.5" />
-              </svg>
-            </button>
-
-            {/* Unlink MFB match — requires confirm */}
-            {confirmUnlink ? (
-              <div className="flex items-center gap-0.5 shrink-0">
-                <span className="text-[10px] text-orange-400 mr-0.5">Unlink?</span>
+            {showMenu && (
+              <div className="absolute right-0 top-full mt-1 z-50 min-w-[176px] bg-surface-panel border border-surface-border rounded-lg shadow-xl py-1 text-[11px]">
                 <button
                   type="button"
-                  onClick={() => { unlinkMfb(file.id); cancelConfirm(); syncLibraryToMfb() }}
-                  title="Confirm unlink"
-                  className="px-1.5 h-5 text-[10px] font-medium text-orange-400 hover:text-orange-300 rounded hover:bg-orange-500/15 transition-colors"
+                  onClick={async () => {
+                    setShowMenu(false)
+                    await window.electronAPI.copyFile(file.filePath)
+                    if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+                    setCopied(true)
+                    copyTimerRef.current = setTimeout(() => setCopied(false), 3000)
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-gray-300 hover:bg-surface-hover transition-colors"
                 >
-                  Yes
+                  <svg className="w-3.5 h-3.5 shrink-0 text-gray-500" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="5.5" y="5.5" width="8.5" height="8.5" rx="1.5" />
+                    <path d="M10.5 5.5V3.5A1.5 1.5 0 0 0 9 2H3.5A1.5 1.5 0 0 0 2 3.5V9A1.5 1.5 0 0 0 3.5 10.5H5.5" />
+                  </svg>
+                  Copy file path
                 </button>
+
+                {file.mfbTrackId && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={rescanning}
+                      onClick={async () => {
+                        setShowMenu(false)
+                        if (!file.mfbTrackId) return
+                        setRescanning(true)
+                        try {
+                          const data = (await window.electronAPI.mfbGetTrack(file.mfbTrackId)) as {
+                            id: number; title: string; description: string
+                            artists: { id: number; name: string }[]
+                            album: { id: number; title: string; image_url: string }
+                            tags: Record<string, { id: number; name: string; slug: { en: string } }[]>
+                            audio_features?: MfbAudioFeatures
+                            bandcamp_url?: string
+                            beatport_url?: string
+                          }
+                          const artist = data.artists.map((a) => a.name).join(', ')
+                          const tags = Object.values(data.tags).flat().map((t) => t.name)
+                          const hourSlug = data.tags['Hour']?.[0]?.slug?.en
+                          updateFile(file.id, {
+                            artist, album: data.album.title, tags,
+                            notes: data.description ?? '',
+                            trackTitle: data.title,
+                            mfbApplied: true,
+                            appliedPathGuess: true,
+                            audioFeatures: data.audio_features ?? null,
+                            bandcampUrl: data.bandcamp_url ?? null,
+                            beatportUrl: data.beatport_url ?? null,
+                            ...(hourSlug ? { breathworkPhase: hourSlug as import('../types').BreathworkPhase } : {}),
+                          })
+                          if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+                          setRefreshed(true)
+                          refreshTimerRef.current = setTimeout(() => setRefreshed(false), 3000)
+                        } catch { /* ignore */ } finally {
+                          setRescanning(false)
+                        }
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-gray-300 hover:bg-surface-hover transition-colors disabled:opacity-40"
+                    >
+                      <svg className={`w-3.5 h-3.5 shrink-0 text-gray-500 ${rescanning ? 'animate-spin' : ''}`} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                        <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5" /><path d="M8 2.5l3-1.5M8 2.5l1.5 3" />
+                      </svg>
+                      Re-fetch from MFB
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => { setShowMenu(false); window.open(mfbTrackUrl(file.mfbTrackId!, file.trackTitle || String(file.mfbTrackId))) }}
+                      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-gray-300 hover:bg-surface-hover transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5 shrink-0 text-gray-500" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M7 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8A1.5 1.5 0 0 0 13 12.5V9M9.5 2H14v4.5M14 2L7.5 8.5" />
+                      </svg>
+                      View on MFB
+                    </button>
+
+                    <div className="my-1 border-t border-surface-border" />
+
+                    <button
+                      type="button"
+                      onClick={() => { setShowMenu(false); armConfirmUnlink() }}
+                      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-red-400 hover:bg-surface-hover transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M6.5 9.5l-2 2a2.12 2.12 0 0 0 3 3l2-2M9.5 6.5l2-2a2.12 2.12 0 0 0-3-3l-2 2M5.5 10.5l5-5M2 2l12 12" />
+                      </svg>
+                      Unlink MFB match
+                    </button>
+                  </>
+                )}
+
+                <div className="my-1 border-t border-surface-border" />
+
                 <button
                   type="button"
-                  onClick={cancelConfirm}
-                  title="Cancel"
-                  className="px-1.5 h-5 text-[10px] text-gray-400 hover:text-gray-300 rounded hover:bg-surface-hover transition-colors"
+                  onClick={() => { setShowMenu(false); armConfirmDelete() }}
+                  className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-red-400 hover:bg-surface-hover transition-colors"
                 >
-                  No
+                  <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 5h10M6 5V3.5h4V5M5 5v7.5h6V5H5zM7 8v2.5M9 8v2.5" />
+                  </svg>
+                  Remove from library
                 </button>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={armConfirmUnlink}
-                title="Unlink Music for Breathwork match (wrong match)"
-                className="flex justify-center items-center w-6 h-6 text-gray-500 rounded transition-colors shrink-0 hover:text-red-400 hover:bg-surface-hover"
-              >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6.5 9.5l-2 2a2.12 2.12 0 0 0 3 3l2-2M9.5 6.5l2-2a2.12 2.12 0 0 0-3-3l-2 2M5.5 10.5l5-5M2 2l12 12" />
-                </svg>
-              </button>
             )}
-          </>
+          </div>
         )}
 
         {/* Close panel */}
@@ -469,8 +526,50 @@ export function PropertiesPanel(): JSX.Element {
           duration={file.duration}
           peaks={file.peaks}
           sampleRate={file.sampleRate}
+          clipStartMs={file.clipStartMs}
+          clipEndMs={file.clipEndMs}
+          introEndMs={file.introEndMs}
+          outroStartMs={file.outroStartMs}
+          onSetCuePoints={userAccount ? () => setShowMixCueEditor(true) : undefined}
         />
       </div>
+
+      {/* Cue point summary */}
+      {(file.clipStartMs != null || file.clipEndMs != null || file.introEndMs != null || file.outroStartMs != null) && (
+        <div className="flex items-center gap-3 flex-wrap px-3 py-1.5 border-b border-surface-border shrink-0">
+          {file.clipStartMs != null && (
+            <span className="flex items-center gap-1 text-[10px] text-blue-400 font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
+              S {formatMs(file.clipStartMs)}
+            </span>
+          )}
+          {file.clipEndMs != null && (
+            <span className="flex items-center gap-1 text-[10px] text-violet-400 font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 shrink-0" />
+              E {formatMs(file.clipEndMs)}
+            </span>
+          )}
+          {file.introEndMs != null && (
+            <span className="flex items-center gap-1 text-[10px] text-teal-400 font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-teal-500 shrink-0" />
+              In {formatMs(file.introEndMs)}
+            </span>
+          )}
+          {file.outroStartMs != null && (
+            <span className="flex items-center gap-1 text-[10px] text-orange-400 font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />
+              Out {formatMs(file.outroStartMs)}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowMixCueEditor(true)}
+            className="ml-auto text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
+          >
+            Edit
+          </button>
+        </div>
+      )}
 
       {/* Scrollable metadata */}
       <div className="overflow-y-auto flex-1">
@@ -484,22 +583,25 @@ export function PropertiesPanel(): JSX.Element {
 
       {/* Metadata */}
       <div className="flex flex-col gap-2 p-3 border-b border-surface-border">
-        <span className="text-[10px] text-gray-400 uppercase tracking-wider">Info</span>
-        <EditableRow label="Artist" value={file.artist} onSave={(v) => updateFile(file.id, { artist: v })} />
-        <EditableRow label="Album" value={file.album} onSave={(v) => updateFile(file.id, { album: v })} />
-        <Row label="Duration" value={formatDuration(file.duration)} />
-        <Row label="Format" value={file.format.toUpperCase()} />
-        <Row label="Sample rate" value={`${(file.sampleRate / 1000).toFixed(1)} kHz`} />
-        <Row label="Channels" value={file.channels === 2 ? 'Stereo' : file.channels === 1 ? 'Mono' : String(file.channels)} />
-        <Row label="File size" value={formatSize(file.fileSize)} />
+        <SectionHeader label="Info" open={sections.info} onToggle={() => toggleSection('info')} />
+        {sections.info && (
+          <div className="flex flex-col gap-2 mt-1">
+            <EditableRow label="Artist" value={file.artist} onSave={(v) => updateFile(file.id, { artist: v })} />
+            <EditableRow label="Album" value={file.album} onSave={(v) => updateFile(file.id, { album: v })} />
+            <Row label="Duration" value={formatDuration(file.duration)} />
+            <Row label="Format" value={file.format.toUpperCase()} />
+            <Row label="Sample rate" value={`${(file.sampleRate / 1000).toFixed(1)} kHz`} />
+            <Row label="Channels" value={file.channels === 2 ? 'Stereo' : file.channels === 1 ? 'Mono' : String(file.channels)} />
+            <Row label="File size" value={formatSize(file.fileSize)} />
+          </div>
+        )}
       </div>
 
       {!file.appliedPathGuess && (file.artistPathGuess.trim() || file.albumPathGuess.trim()) && (
         <div className="flex flex-col gap-2 p-3 border-b border-surface-border">
-          {/* Header + swap button */}
-          <div className="flex justify-between items-center">
-            <span className="text-[10px] text-gray-400 uppercase tracking-wider">From folder layout</span>
-            {file.artistPathGuess.trim() && file.albumPathGuess.trim() && !file.appliedPathGuess && (
+          <div className="flex items-center justify-between">
+            <SectionHeader label="From folder layout" open={sections.folderLayout} onToggle={() => toggleSection('folderLayout')} />
+            {sections.folderLayout && file.artistPathGuess.trim() && file.albumPathGuess.trim() && !file.appliedPathGuess && (
               <button
                 type="button"
                 onClick={() => updateFile(file.id, {
@@ -507,7 +609,7 @@ export function PropertiesPanel(): JSX.Element {
                   albumPathGuess: file.artistPathGuess,
                 })}
                 title="Swap artist / album"
-                className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1"
+                className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1 shrink-0 ml-2"
               >
                 <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M1 4h10M8 1l3 3-3 3M11 8H1M4 5l-3 3 3 3" />
@@ -517,197 +619,203 @@ export function PropertiesPanel(): JSX.Element {
             )}
           </div>
 
-          {/* Folder names */}
-          <div className="flex flex-col gap-1">
-            {file.artistPathGuess.trim() && (
-              <div className="flex gap-2 justify-between items-baseline">
-                <span className="text-[10px] text-gray-400 uppercase shrink-0 tracking-wider">Artist</span>
-                <span className={`text-[11px] text-gray-200 truncate ${!file.appliedPathGuess ? 'italic' : ''}`} title={file.artistPathGuess}>
-                  {file.artistPathGuess.trim()}
-                </span>
+          {sections.folderLayout && (
+            <>
+              <div className="flex flex-col gap-1">
+                {file.artistPathGuess.trim() && (
+                  <div className="flex gap-2 justify-between items-baseline">
+                    <span className="text-[10px] text-gray-400 uppercase shrink-0 tracking-wider">Artist</span>
+                    <span className={`text-[11px] text-gray-200 truncate ${!file.appliedPathGuess ? 'italic' : ''}`} title={file.artistPathGuess}>
+                      {file.artistPathGuess.trim()}
+                    </span>
+                  </div>
+                )}
+                {file.albumPathGuess.trim() && (
+                  <div className="flex gap-2 justify-between items-baseline">
+                    <span className="text-[10px] text-gray-400 uppercase shrink-0 tracking-wider">Album</span>
+                    <span className={`text-[11px] text-gray-200 truncate ${!file.appliedPathGuess ? 'italic' : ''}`} title={file.albumPathGuess}>
+                      {file.albumPathGuess.trim()}
+                    </span>
+                  </div>
+                )}
               </div>
-            )}
-            {file.albumPathGuess.trim() && (
-              <div className="flex gap-2 justify-between items-baseline">
-                <span className="text-[10px] text-gray-400 uppercase shrink-0 tracking-wider">Album</span>
-                <span className={`text-[11px] text-gray-200 truncate ${!file.appliedPathGuess ? 'italic' : ''}`} title={file.albumPathGuess}>
-                  {file.albumPathGuess.trim()}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Actions */}
-          {!file.appliedPathGuess && (
-            file.artistPathGuess.trim() && file.albumPathGuess.trim() ? (
-              /* Both present — single apply */
-              <button
-                type="button"
-                onClick={() => updateFile(file.id, pathGuessUpdatesForApply(file))}
-                className="w-full py-1.5 text-[11px] rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
-              >
-                Apply folder names to track
-              </button>
-            ) : (
-              /* Only one folder — let user decide which field it maps to */
-              <div className="flex gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => updateFile(file.id, {
-                    artist: file.artistPathGuess.trim() || file.albumPathGuess.trim(),
-                    appliedPathGuess: true,
-                  })}
-                  className="flex-1 py-1.5 text-[11px] rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
-                >
-                  Use as Artist
-                </button>
-                <button
-                  type="button"
-                  onClick={() => updateFile(file.id, {
-                    album: file.artistPathGuess.trim() || file.albumPathGuess.trim(),
-                    appliedPathGuess: true,
-                  })}
-                  className="flex-1 py-1.5 text-[11px] rounded border border-surface-border text-gray-300 hover:bg-surface-hover transition-colors"
-                >
-                  Use as Album
-                </button>
-              </div>
-            )
+              {!file.appliedPathGuess && (
+                file.artistPathGuess.trim() && file.albumPathGuess.trim() ? (
+                  <button
+                    type="button"
+                    onClick={() => updateFile(file.id, pathGuessUpdatesForApply(file))}
+                    className="w-full py-1.5 text-[11px] rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+                  >
+                    Apply folder names to track
+                  </button>
+                ) : (
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => updateFile(file.id, {
+                        artist: file.artistPathGuess.trim() || file.albumPathGuess.trim(),
+                        appliedPathGuess: true,
+                      })}
+                      className="flex-1 py-1.5 text-[11px] rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+                    >
+                      Use as Artist
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateFile(file.id, {
+                        album: file.artistPathGuess.trim() || file.albumPathGuess.trim(),
+                        appliedPathGuess: true,
+                      })}
+                      className="flex-1 py-1.5 text-[11px] rounded border border-surface-border text-gray-300 hover:bg-surface-hover transition-colors"
+                    >
+                      Use as Album
+                    </button>
+                  </div>
+                )
+              )}
+            </>
           )}
         </div>
       )}
 
       {/* Tags */}
       <div className="flex flex-col gap-2 p-3 border-b border-surface-border">
-        <span className="text-[10px] text-gray-400 uppercase tracking-wider">Tags</span>
-        <div className="flex flex-wrap gap-1">
-          {file.tags.map((tag) => (
-            <span
-              key={tag}
-              className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded bg-surface-hover border border-surface-border text-gray-200"
-            >
-              {tag}
-              <button
-                onClick={() => updateFile(file.id, { tags: file.tags.filter((t) => t !== tag) })}
-                title={`Remove tag "${tag}"`}
-                className="text-gray-500 hover:text-gray-300"
-              >×</button>
-            </span>
-          ))}
-          <TagInput onAdd={(tag) => {
-            if (!file.tags.includes(tag)) updateFile(file.id, { tags: [...file.tags, tag] })
-          }} />
-        </div>
+        <SectionHeader label="Tags" open={sections.tags} onToggle={() => toggleSection('tags')} />
+        {sections.tags && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {file.tags.map((tag) => (
+              <span
+                key={tag}
+                className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded bg-surface-hover border border-surface-border text-gray-200"
+              >
+                {tag}
+                <button
+                  onClick={() => updateFile(file.id, { tags: file.tags.filter((t) => t !== tag) })}
+                  title={`Remove tag "${tag}"`}
+                  className="text-gray-500 hover:text-gray-300"
+                >×</button>
+              </span>
+            ))}
+            <TagInput onAdd={(tag) => {
+              if (!file.tags.includes(tag)) updateFile(file.id, { tags: [...file.tags, tag] })
+            }} />
+          </div>
+        )}
       </div>
 
       {/* Audio features */}
       {file.audioFeatures && (
         <div className="flex flex-col gap-2 p-3 border-b border-surface-border">
-          <span className="text-[10px] text-gray-400 uppercase tracking-wider">Audio Features</span>
-          <div className="flex flex-col gap-1.5">
-            <AudioFeatureBar label="Intensity" value={file.audioFeatures.intensity} />
-            <AudioFeatureBar label="Activation" value={file.audioFeatures.activation_intensity} />
-            <AudioFeatureBar label="Affective" value={file.audioFeatures.affective_intensity} />
-            <AudioFeatureBar label="Spaciousness" value={Number(file.audioFeatures.spaciousness)} />
-            <AudioFeatureBar label="Tension" value={Number(file.audioFeatures.tension)} />
-            <AudioFeatureLabelRow label="Energy" text={file.audioFeatures.energy_label} value={file.audioFeatures.energy} />
-            <AudioFeatureLabelRow label="Valence" text={file.audioFeatures.valence_label} value={file.audioFeatures.valence} />
-            <AudioFeatureLabelRow label="Danceability" text={file.audioFeatures.danceability_label} value={file.audioFeatures.danceability} />
-            <div className="flex justify-between items-center">
-              <span className="text-[10px] text-gray-500 w-20 shrink-0">Tempo</span>
-              <span className="text-[10px] text-gray-200">{file.audioFeatures.tempo_label}</span>
-              <span className="text-[10px] text-gray-400 tabular-nums">{file.audioFeatures.tempo.toFixed(0)} BPM</span>
+          <SectionHeader label="Audio Features" open={sections.audioFeatures} onToggle={() => toggleSection('audioFeatures')} />
+          {sections.audioFeatures && (
+            <div className="flex flex-col gap-1.5 mt-1">
+              <AudioFeatureBar label="Intensity" value={file.audioFeatures.intensity} />
+              <AudioFeatureBar label="Activation" value={file.audioFeatures.activation_intensity} />
+              <AudioFeatureBar label="Affective" value={file.audioFeatures.affective_intensity} />
+              <AudioFeatureBar label="Spaciousness" value={Number(file.audioFeatures.spaciousness)} />
+              <AudioFeatureBar label="Tension" value={Number(file.audioFeatures.tension)} />
+              <AudioFeatureLabelRow label="Energy" text={file.audioFeatures.energy_label} value={file.audioFeatures.energy} />
+              <AudioFeatureLabelRow label="Valence" text={file.audioFeatures.valence_label} value={file.audioFeatures.valence} />
+              <AudioFeatureLabelRow label="Danceability" text={file.audioFeatures.danceability_label} value={file.audioFeatures.danceability} />
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-gray-500 w-20 shrink-0">Tempo</span>
+                <span className="text-[10px] text-gray-200">{file.audioFeatures.tempo_label}</span>
+                <span className="text-[10px] text-gray-400 tabular-nums">{file.audioFeatures.tempo.toFixed(0)} BPM</span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
       {(file.bandcampUrl || file.beatportUrl) && (
         <div className="flex flex-col gap-2 p-3 border-b border-surface-border">
-          <span className="text-[10px] text-gray-400 uppercase tracking-wider">Buy</span>
-          <div className="flex gap-2">
-            {file.bandcampUrl && (
-              <button
-                type="button"
-                onClick={() => window.open(file.bandcampUrl!)}
-                className="px-2.5 py-1 text-[10px] rounded border border-surface-border text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors"
-              >
-                Bandcamp
-              </button>
-            )}
-            {file.beatportUrl && (
-              <button
-                type="button"
-                onClick={() => window.open(file.beatportUrl!)}
-                className="px-2.5 py-1 text-[10px] rounded border border-surface-border text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors"
-              >
-                Beatport
-              </button>
-            )}
-          </div>
+          <SectionHeader label="Buy" open={sections.buy} onToggle={() => toggleSection('buy')} />
+          {sections.buy && (
+            <div className="flex gap-2 mt-1">
+              {file.bandcampUrl && (
+                <button
+                  type="button"
+                  onClick={() => window.open(file.bandcampUrl!)}
+                  className="px-2.5 py-1 text-[10px] rounded border border-surface-border text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors"
+                >
+                  Bandcamp
+                </button>
+              )}
+              {file.beatportUrl && (
+                <button
+                  type="button"
+                  onClick={() => window.open(file.beatportUrl!)}
+                  className="px-2.5 py-1 text-[10px] rounded border border-surface-border text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors"
+                >
+                  Beatport
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
       {/* Duplicate MFB match */}
       {duplicates.length > 0 && (
         <div className="flex flex-col gap-2 p-3 border-b border-surface-border">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-yellow-500/80 uppercase tracking-wider">Duplicate Match</span>
-            <span className="text-[10px] text-gray-500">({duplicates.length + 1} files)</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <SectionHeader label="Duplicate Match" open={sections.duplicates} onToggle={() => toggleSection('duplicates')} />
+              <span className="text-[10px] text-gray-500">({duplicates.length + 1} files)</span>
+            </div>
           </div>
-          <p className="text-[10px] text-gray-400 leading-relaxed">
-            {duplicates.length} other {duplicates.length === 1 ? 'file is' : 'files are'} linked to the same Music for Breathwork track listing.
-            Only one file per track is used when building sessions — unlink the duplicates to resolve.
-          </p>
-
-          {/* Current file */}
-          <DupeRow
-            id={file.id}
-            fileName={file.fileName}
-            folderPath={file.folderPath}
-            format={file.format}
-            sampleRate={file.sampleRate}
-            fileSize={file.fileSize}
-            isCurrent
-            onUnlink={() => unlinkMfb(file.id)}
-          />
-
-          {/* Other files */}
-          {duplicates.map((d) => (
-            <DupeRow
-              key={d.id}
-              id={d.id}
-              fileName={d.fileName}
-              folderPath={d.folderPath}
-              format={d.format}
-              sampleRate={d.sampleRate}
-              fileSize={d.fileSize}
-              onPrefer={() => {
-                unlinkMfb(file.id)
-                for (const other of duplicates) { if (other.id !== d.id) unlinkMfb(other.id) }
-                selectFile(d.id)
-              }}
-              onUnlink={() => unlinkMfb(d.id)}
-              onRemove={() => removeFile(d.id)}
-            />
-          ))}
-
-          <div className="flex gap-1.5">
-            <button
-              type="button"
-              onClick={() => { for (const d of duplicates) unlinkMfb(d.id) }}
-              className="flex-1 py-1.5 text-[11px] rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
-            >
-              Unlink the other{duplicates.length > 1 ? ` ${duplicates.length}` : ''}
-            </button>
-            <button
-              type="button"
-              onClick={() => { for (const d of duplicates) removeFile(d.id) }}
-              className="flex-1 py-1.5 text-[11px] rounded border border-red-500/30 bg-red-500/5 text-red-400 hover:bg-red-500/15 transition-colors"
-            >
-              Remove the other{duplicates.length > 1 ? ` ${duplicates.length}` : ''}
-            </button>
-          </div>
+          {sections.duplicates && (
+            <>
+              <p className="text-[10px] text-gray-400 leading-relaxed">
+                {duplicates.length} other {duplicates.length === 1 ? 'file is' : 'files are'} linked to the same Music for Breathwork track listing.
+                Only one file per track is used when building sessions — unlink the duplicates to resolve.
+              </p>
+              <DupeRow
+                id={file.id}
+                fileName={file.fileName}
+                folderPath={file.folderPath}
+                format={file.format}
+                sampleRate={file.sampleRate}
+                fileSize={file.fileSize}
+                isCurrent
+                onUnlink={() => unlinkMfb(file.id)}
+              />
+              {duplicates.map((d) => (
+                <DupeRow
+                  key={d.id}
+                  id={d.id}
+                  fileName={d.fileName}
+                  folderPath={d.folderPath}
+                  format={d.format}
+                  sampleRate={d.sampleRate}
+                  fileSize={d.fileSize}
+                  onPrefer={() => {
+                    unlinkMfb(file.id)
+                    for (const other of duplicates) { if (other.id !== d.id) unlinkMfb(other.id) }
+                    selectFile(d.id)
+                  }}
+                  onUnlink={() => unlinkMfb(d.id)}
+                  onRemove={() => removeFile(d.id)}
+                />
+              ))}
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => { for (const d of duplicates) unlinkMfb(d.id) }}
+                  className="flex-1 py-1.5 text-[11px] rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+                >
+                  Unlink the other{duplicates.length > 1 ? ` ${duplicates.length}` : ''}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { for (const d of duplicates) removeFile(d.id) }}
+                  className="flex-1 py-1.5 text-[11px] rounded border border-red-500/30 bg-red-500/5 text-red-400 hover:bg-red-500/15 transition-colors"
+                >
+                  Remove the other{duplicates.length > 1 ? ` ${duplicates.length}` : ''}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -723,16 +831,57 @@ export function PropertiesPanel(): JSX.Element {
       />
 
       {/* Notes */}
-      <div className="flex flex-col gap-2 p-3">
-        <span className="text-[10px] text-gray-400 uppercase tracking-wider">Notes</span>
-        <textarea
-          value={file.notes}
-          onChange={(e) => updateFile(file.id, { notes: e.target.value })}
-          placeholder="Add notes…"
-          rows={4}
-          className="w-full text-[11px] text-gray-200 bg-surface-hover border border-surface-border rounded px-2 py-1.5 resize-none outline-none focus:border-accent/50 placeholder-gray-700 leading-relaxed"
-        />
+      <div className="flex flex-col gap-2 p-3 border-b border-surface-border">
+        <SectionHeader label="Notes" open={sections.notes} onToggle={() => toggleSection('notes')} />
+        {sections.notes && (
+          <textarea
+            value={file.notes}
+            onChange={(e) => updateFile(file.id, { notes: e.target.value })}
+            placeholder="Add notes…"
+            rows={4}
+            className="w-full text-[11px] text-gray-200 bg-surface-hover border border-surface-border rounded px-2 py-1.5 resize-none outline-none focus:border-accent/50 placeholder-gray-700 leading-relaxed mt-1"
+          />
+        )}
       </div>
+
+      {/* Mix Cues — requires MFB login */}
+      {userAccount && (
+        <div className="flex flex-col gap-2 p-3">
+          <SectionHeader label="Mix Cues" open={sections.mixCues} onToggle={() => toggleSection('mixCues')} />
+          {sections.mixCues && (
+            <div className="flex flex-col gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => setShowMixCueEditor(true)}
+                className="w-full py-1.5 text-[11px] rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+              >
+                Set Cue Points
+              </button>
+
+              {(file.introEndMs != null || file.outroStartMs != null || file.clipStartMs != null || file.clipEndMs != null) && (
+                <button
+                  type="button"
+                  onClick={() => updateFile(file.id, {
+                    introEndMs: null, outroStartMs: null, fadeInCurve: 0, fadeOutCurve: 0,
+                    clipStartMs: null, clipEndMs: null,
+                  })}
+                  className="w-full py-1 text-[10px] text-gray-600 hover:text-gray-300 border border-surface-border rounded transition-colors"
+                >
+                  Reset all cue points
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {showMixCueEditor && (
+        <MixCueEditorModal
+          file={file}
+          onSave={(updates) => updateFile(file.id, updates)}
+          onClose={() => setShowMixCueEditor(false)}
+        />
+      )}
 
       </div>{/* end scrollable metadata */}
     </div>

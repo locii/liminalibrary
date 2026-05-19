@@ -1,6 +1,17 @@
 import { create } from 'zustand'
 import type { BreathworkPhase, Catalogue, LibraryFile, MfbMatch, MfbPlaylist, MfbPlaylistDetail, MfbTag, WatchedFolder } from '../types'
 
+function normalizeCurve(v: unknown): number {
+  if (typeof v === 'number') {
+    // Remap old 0-1 storage (0=cut, 0.5=linear, 1=slow) to Limina Mix -1..1 (0=linear, -1=slow, 1=fast)
+    if (v >= 0 && v <= 1) return Math.max(-1, Math.min(1, 1 - v * 2))
+    return Math.max(-1, Math.min(1, v))
+  }
+  if (v === 'exponential') return -0.8
+  if (v === 'cut') return 0
+  return 0  // 'linear' or missing
+}
+
 function normalizeImportedFile(f: Catalogue['files'][number]): LibraryFile {
   return {
     ...f,
@@ -18,6 +29,12 @@ function normalizeImportedFile(f: Catalogue['files'][number]): LibraryFile {
     bandcampUrl: f.bandcampUrl ?? null,
     beatportUrl: f.beatportUrl ?? null,
     appleMusicUrl: f.appleMusicUrl ?? null,
+    introEndMs: f.introEndMs ?? null,
+    outroStartMs: f.outroStartMs ?? null,
+    fadeInCurve: normalizeCurve(f.fadeInCurve),
+    fadeOutCurve: normalizeCurve(f.fadeOutCurve),
+    clipStartMs: f.clipStartMs ?? null,
+    clipEndMs: f.clipEndMs ?? null,
   }
 }
 
