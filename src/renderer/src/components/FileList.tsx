@@ -302,6 +302,7 @@ export function FileList(): JSX.Element {
   const [removedSortDir, setRemovedSortDir] = useState<'asc' | 'desc'>('asc')
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const filesRef = useRef<LibraryFile[]>([])
   const [scrollTop, setScrollTop] = useState(0)
   const [containerHeight, setContainerHeight] = useState(400)
 
@@ -342,6 +343,19 @@ export function FileList(): JSX.Element {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [selectedFileId, allFiles])
+
+  useEffect(() => {
+    if (!selectedFileId) return
+    const idx = filesRef.current.findIndex((f) => f.id === selectedFileId)
+    if (idx < 0) return
+    const el = scrollRef.current
+    if (!el) return
+    const rowTop = idx * ROW_HEIGHT
+    const rowBottom = rowTop + ROW_HEIGHT
+    if (rowTop < el.scrollTop || rowBottom > el.scrollTop + el.clientHeight) {
+      el.scrollTop = Math.max(0, rowTop - el.clientHeight / 2 + ROW_HEIGHT / 2)
+    }
+  }, [selectedFileId])
 
   useEffect(() => {
     if (!contextMenu) return
@@ -422,6 +436,7 @@ export function FileList(): JSX.Element {
   }
 
   files = sortFiles(files, sortState)
+  filesRef.current = files
   const multiSort = sortState.length > 1
 
   // Until the user manually drags the hour column, auto-fit it to all chips.

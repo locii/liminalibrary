@@ -8,6 +8,7 @@ import { IndexingLog } from './components/IndexingLog'
 import { AccountButton } from './components/AccountButton'
 import { MissingTrackPanel } from './components/MissingTrackPanel'
 import { PlaylistPanel } from './components/PlaylistPanel'
+import { PlaylistTrackSearch } from './components/PlaylistTrackSearch'
 import { GuidedTour } from './components/GuidedTour'
 import { PlayerBar } from './components/PlayerBar'
 import { SettingsPanel } from './components/SettingsPanel'
@@ -33,6 +34,7 @@ export default function App(): JSX.Element {
   const selectedFileId = useLibraryStore((s) => s.selectedFileId)
   const selectedMissingTrackId = useLibraryStore((s) => s.selectedMissingTrackId)
   const selectedPlaylistId = useLibraryStore((s) => s.selectedPlaylistId)
+  const playlistTrackQuery = useLibraryStore((s) => s.playlistTrackQuery)
   const loadCatalogue = useLibraryStore((s) => s.loadCatalogue)
   const addWatchedFolder = useLibraryStore((s) => s.addWatchedFolder)
   const addFiles = useLibraryStore((s) => s.addFiles)
@@ -564,7 +566,7 @@ export default function App(): JSX.Element {
           <FolderPanel onAddFolder={handleAddFolder} />
           <div className="flex flex-col flex-1 min-h-0 min-w-0">
             <div className="flex flex-1 min-h-0">
-              {selectedPlaylistId !== null ? <PlaylistPanel /> : <FileList />}
+              {playlistTrackQuery ? <PlaylistTrackSearch /> : selectedPlaylistId !== null ? <PlaylistPanel /> : <FileList />}
               {(selectedFileId || selectedMissingTrackId) && (
                 <div className="w-96 border-l shrink-0 border-surface-border">
                   {selectedFileId ? <PropertiesPanel /> : <MissingTrackPanel key={selectedMissingTrackId} />}

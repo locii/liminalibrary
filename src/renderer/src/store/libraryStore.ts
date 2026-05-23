@@ -80,6 +80,7 @@ interface LibraryState {
   restoreFile: (id: string) => void
   selectFile: (id: string | null) => void
   selectFolder: (id: string | null) => void
+  showFileInLibrary: (folderId: string | null, fileId: string) => void
   selectTag: (tag: string) => void
   toggleSelectedTag: (tag: string) => void
   clearSelectedTags: () => void
@@ -100,6 +101,8 @@ interface LibraryState {
   previewQueue: string[]
   setPreview: (fileId: string | null, queue: string[]) => void
   removeFiles: (ids: string[]) => void
+  playlistTrackQuery: string
+  setPlaylistTrackQuery: (q: string) => void
 }
 
 export const useLibraryStore = create<LibraryState>((set, get) => ({
@@ -124,6 +127,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   setLoginFlash: (v) => set({ loginFlash: v }),
   previewFileId: null,
   previewQueue: [],
+  playlistTrackQuery: '',
 
   setUserAccount: (user) => set({ userAccount: user }),
   setShowLoginModal: (show) => set({ showLoginModal: show }),
@@ -213,6 +217,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   selectFile: (id) => set({ selectedFileId: id, selectedMissingTrackId: null }),
 
   selectFolder: (id) => set({ selectedFolderId: id, selectedTags: [], selectedFileId: null, selectedPlaylistId: null, unmatchedOnly: false }),
+
+  showFileInLibrary: (folderId, fileId) => set({ selectedFolderId: folderId, selectedFileId: fileId, selectedPlaylistId: null, selectedMissingTrackId: null, selectedTags: [], unmatchedOnly: false }),
 
   selectTag: (tag) => set((s) => ({
     selectedTags: s.selectedTags.length === 1 && s.selectedTags[0] === tag ? [] : [tag],
@@ -354,6 +360,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   }),
 
   setPreview: (fileId, queue) => set({ previewFileId: fileId, previewQueue: fileId === null ? [] : queue }),
+  setPlaylistTrackQuery: (q) => set({ playlistTrackQuery: q }),
 
   removeFiles: (ids) => set((s) => {
     const idSet = new Set(ids)

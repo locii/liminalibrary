@@ -150,6 +150,39 @@ export function registerAuthHandlers(): void {
     }
   })
 
+  ipcMain.handle('auth:searchPlaylistTracks', async (_, query: string) => {
+    const token = await loadToken()
+    if (!token) return []
+    try {
+      const res = await apiGet<unknown>(
+        `/user/playlists/tracks/search?q=${encodeURIComponent(query)}`, token
+      )
+      console.log('[auth:searchPlaylistTracks] raw response:', JSON.stringify(res).slice(0, 500))
+      const arr: unknown[] = Array.isArray(res)
+        ? res
+        : Array.isArray((res as Record<string, unknown>)['data'])
+          ? (res as Record<string, unknown>)['data'] as unknown[]
+          : []
+      return arr.map((t) => {
+        const track = t as Record<string, unknown>
+        return {
+          id: track['id'] as number,
+          title: track['title'] as string,
+          artist: (track['artist'] ?? '') as string,
+          album_image_url: (track['album_image_url'] ?? undefined) as string | undefined,
+          duration: (track['duration'] ?? 0) as number,
+          bandcamp_url: (track['bandcamp_url'] ?? undefined) as string | undefined,
+          beatport_url: (track['beatport_url'] ?? undefined) as string | undefined,
+          apple_music_url: (track['apple_music_url'] ?? undefined) as string | undefined,
+          playlists: ((track['playlists'] ?? []) as { id: number; title: string }[]),
+        }
+      })
+    } catch (err) {
+      console.error('[auth:searchPlaylistTracks] error:', err)
+      return []
+    }
+  })
+
   ipcMain.handle('auth:syncLibrary', async (_, trackIds: number[]) => {
     const token = await loadToken()
     if (!token) throw new Error('Not authenticated')

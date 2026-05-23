@@ -258,7 +258,9 @@ export function PlaylistPanel(): JSX.Element {
   const playlists = useLibraryStore((s) => s.playlists)
   const selectedPlaylistId = useLibraryStore((s) => s.selectedPlaylistId)
   const allFiles = useLibraryStore((s) => s.files)
+  const watchedFolders = useLibraryStore((s) => s.watchedFolders)
   const selectFile = useLibraryStore((s) => s.selectFile)
+  const showFileInLibrary = useLibraryStore((s) => s.showFileInLibrary)
   const selectMissingTrack = useLibraryStore((s) => s.selectMissingTrack)
   const selectedFileId = useLibraryStore((s) => s.selectedFileId)
   const selectedMissingTrackId = useLibraryStore((s) => s.selectedMissingTrackId)
@@ -272,6 +274,14 @@ export function PlaylistPanel(): JSX.Element {
   const detail = useLibraryStore((s) => s.selectedPlaylistDetail)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [contextMenu, setContextMenu] = useState<{ filePath: string; fileId: string; x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    if (!contextMenu) return
+    function close(): void { setContextMenu(null) }
+    window.addEventListener('mousedown', close)
+    return () => window.removeEventListener('mousedown', close)
+  }, [contextMenu])
 
   const playlist = selectedPlaylistId !== null
     ? playlists.find((p) => p.id === selectedPlaylistId) ?? null
@@ -381,33 +391,25 @@ export function PlaylistPanel(): JSX.Element {
                 </button>
               )}
             </div>
+            
           )
         })()}
         {/* Title + stats + actions */}
         <div className="flex flex-col flex-1 gap-1 min-w-0">
         <div className="flex gap-2 items-center">
-          <h2 className="text-[12px] font-semibold text-gray-200 truncate flex-1 min-w-0">{detail.title}</h2>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              type="button"
-              disabled={matchedCount === 0 || saving}
-              onClick={handleCreateSession}
-              className="px-2 py-0.5 text-[10px] rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
-            >
-              {saving ? 'Creating…' : savedPath ? 'New Version' : 'Create in Limina Mix'}
-            </button>
-            {savedPath && (
-              <button
-                type="button"
-                onClick={() => window.electronAPI.studioOpenFile(savedPath)}
-                className="px-2 py-0.5 text-[10px] rounded border border-surface-border text-gray-400 hover:text-gray-200 hover:bg-surface-hover transition-colors"
+          <div className="flex flex-col flex-1 min-w-0">
+            <div className="flex gap-4">
+              <h2 className="text-[12px] font-semibold text-gray-200 truncate min-w-0">{detail.title}</h2>
+              <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); window.open(`https://musicforbreathwork.com/dashboard/playlists/edit/${detail.id}`) }}
+                title="Edit on Music for Breathwork"
+                className="shrink-0 text-[10px] text-gray-600 hover:text-gray-300 transition-colors"
               >
-                Open
-              </button>
-            )}
-          </div>
-        </div>
-          <div className="flex gap-3 items-center">
+                Edit
+              </a>
+            </div>
+            <div className="flex gap-3 items-center">
             <span className="text-[10px] text-gray-500 tabular-nums">
               {matchedCount}/{allTracks.length} tracks
             </span>
@@ -418,6 +420,34 @@ export function PlaylistPanel(): JSX.Element {
               <span className="text-[10px] text-gray-600 tabular-nums">{missingCount} missing</span>
             )}
           </div>
+            
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              disabled={matchedCount === 0 || saving}
+              onClick={handleCreateSession}
+              className="flex items-center gap-1.5 px-2 py-0.5 text-[10px] rounded border border-surface-border text-gray-200 hover:text-gray-200 hover:bg-surface-border transition-colors disabled:opacity-40 disabled:pointer-events-none"
+            >
+              {saving && (
+                <svg className="w-2.5 h-2.5 animate-spin shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <path d="M6 1v2M6 9v2M1 6h2M9 6h2" />
+                </svg>
+              )}
+              {saving ? 'Creating…' : savedPath ? 'Create New Version for Limina Mix' : 'Export playlist to Limina Mix'}
+            </button>
+            {savedPath && (
+              <button
+                type="button"
+                onClick={() => window.electronAPI.studioOpenFile(savedPath)}
+                className="px-2 py-0.5 text-[10px] rounded border border-surface-border text-gray-200 hover:text-gray-200 hover:bg-surface-border transition-colors"
+              >
+                Open in Limina Mix
+              </button>
+            )}
+          </div>
+        </div>
+          
         </div>
       </div>
 
@@ -455,6 +485,9 @@ export function PlaylistPanel(): JSX.Element {
               return (
                 <div
                   key={track.id}
+                  draggable={!!file}
+                  onDragStart={file ? (e) => { e.preventDefault(); window.electronAPI.startDrag(file.filePath) } : undefined}
+                  onContextMenu={file ? (e) => { e.preventDefault(); setContextMenu({ filePath: file.filePath, fileId: file.id, x: e.clientX, y: e.clientY }) } : undefined}
                   onClick={handleRowClick}
                   className={`group flex items-center gap-2 px-3 border-b border-surface-border/50 transition-colors cursor-pointer select-none ${
                     isSelected
@@ -554,6 +587,40 @@ export function PlaylistPanel(): JSX.Element {
           <p className="text-[10px] text-gray-600">
             {missingCount} track{missingCount === 1 ? '' : 's'} not in library will be skipped.
           </p>
+        </div>
+      )}
+
+      {contextMenu && (
+        <div
+          className="fixed z-50 min-w-[160px] rounded border border-surface-border bg-surface-panel shadow-lg py-1 text-[11px]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="w-full text-left px-3 py-1.5 text-gray-300 hover:bg-surface-hover transition-colors"
+            onClick={() => { window.electronAPI.copyFile(contextMenu.filePath); setContextMenu(null) }}
+          >
+            Copy
+          </button>
+          <button
+            type="button"
+            className="w-full text-left px-3 py-1.5 text-gray-300 hover:bg-surface-hover transition-colors"
+            onClick={() => { window.electronAPI.showInFolder(contextMenu.filePath); setContextMenu(null) }}
+          >
+            Show in Finder
+          </button>
+          <button
+            type="button"
+            className="w-full text-left px-3 py-1.5 text-gray-300 hover:bg-surface-hover transition-colors"
+            onClick={() => {
+              const folder = watchedFolders.find((wf) => contextMenu.filePath.startsWith(wf.path))
+              showFileInLibrary(folder?.id ?? null, contextMenu.fileId)
+              setContextMenu(null)
+            }}
+          >
+            Show in Library
+          </button>
         </div>
       )}
     </div>

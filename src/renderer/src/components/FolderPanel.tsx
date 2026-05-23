@@ -92,6 +92,8 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
   const playlists = useLibraryStore((s) => s.playlists)
   const setPlaylists = useLibraryStore((s) => s.setPlaylists)
   const selectPlaylist = useLibraryStore((s) => s.selectPlaylist)
+  const playlistTrackQuery = useLibraryStore((s) => s.playlistTrackQuery)
+  const setPlaylistTrackQuery = useLibraryStore((s) => s.setPlaylistTrackQuery)
 
   const totalFiles = files.length
   const matchedFiles = files.filter((f) => f.mfbTrackId !== null).length
@@ -116,11 +118,13 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
       clearSelectedTags()
       setTagQuery('')
       setPlaylistSearch('')
+      setPlaylistTrackQuery('')
       selectPlaylist(null)
     } else if (next === 'tags') {
       selectFolder(null)
       setFolderQuery('')
       setPlaylistSearch('')
+      setPlaylistTrackQuery('')
       selectPlaylist(null)
     } else {
       selectFolder(null)
@@ -455,6 +459,27 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
                   </button>
                 )
               })}
+            </div>
+            {/* Track search across all playlists */}
+            <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-surface-border/50 shrink-0 bg-surface-panel/60 sticky top-[1.625rem] z-10">
+              <svg className="w-3 h-3 text-gray-700 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="5" cy="5" r="3.5" />
+                <path d="M8 8l2.5 2.5" />
+              </svg>
+              <input
+                type="text"
+                value={playlistTrackQuery}
+                onChange={(e) => setPlaylistTrackQuery(e.target.value)}
+                placeholder="Find track in playlists…"
+                className="flex-1 min-w-0 bg-transparent text-[11px] text-gray-400 placeholder-gray-700 outline-none"
+              />
+              {playlistTrackQuery ? (
+                <button type="button" onClick={() => setPlaylistTrackQuery('')} className="text-gray-600 transition-colors hover:text-gray-400 shrink-0" title="Clear">
+                  <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                    <path d="M2 2l8 8M10 2l-8 8" />
+                  </svg>
+                </button>
+              ) : null}
             </div>
             {filteredPlaylists.length === 0 ? (
               <p className="px-3 py-3 text-[10px] text-gray-500">No matching playlists</p>

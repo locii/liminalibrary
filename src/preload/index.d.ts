@@ -1,4 +1,4 @@
-import type { WatchedFolder, LibraryFile, ScanResult, Catalogue, MfbMatch, MfbPlaylist, MfbPlaylistDetail } from '../shared/types'
+import type { WatchedFolder, LibraryFile, ScanResult, Catalogue, MfbMatch, MfbPlaylist, MfbPlaylistDetail, PlaylistTrackSearchResult } from '../shared/types'
 
 export interface MfbMatchEntry {
   id: string
@@ -63,6 +63,7 @@ export interface LibraryAPI {
   authMe: () => Promise<{ id: number; name: string; email: string } | null>
   getUserPlaylists: () => Promise<MfbPlaylist[]>
   getPlaylist: (id: number) => Promise<MfbPlaylistDetail | null>
+  searchPlaylistTracks: (query: string) => Promise<PlaylistTrackSearchResult[]>
   syncLibrary: (trackIds: number[]) => Promise<{ synced: boolean; count: number }>
 
   // Limina Studio

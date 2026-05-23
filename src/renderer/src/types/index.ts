@@ -11,6 +11,7 @@ export type {
   MfbPlaylistTrack,
   MfbPlaylistSegment,
   MfbPlaylistDetail,
+  PlaylistTrackSearchResult,
 } from '../../../shared/types'
 
 export { BREATHWORK_PHASES, PHASE_COLORS, phaseColorForTag, mfbTrackUrl, appleMusicDeepLink } from '../../../shared/types'

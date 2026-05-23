@@ -175,6 +175,18 @@ export interface MfbPlaylistDetail {
   segments: MfbPlaylistSegment[]
 }
 
+export interface PlaylistTrackSearchResult {
+  id: number
+  title: string
+  artist: string
+  album_image_url?: string
+  duration: number  // milliseconds
+  bandcamp_url?: string
+  beatport_url?: string
+  apple_music_url?: string
+  playlists: { id: number; title: string }[]
+}
+
 export interface Catalogue {
   version: string
   watchedFolders: WatchedFolder[]

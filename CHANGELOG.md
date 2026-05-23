@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.1
+
+- **Search tracks across all playlists** — A search box in the playlist sidebar lets you find any track across all your MFB playlists. Results show which playlists contain the track, whether it's in your library, and buy links. Clicking a result jumps straight to that playlist.
+- **Playlist track drag** — Matched tracks in the playlist panel can now be dragged to Finder or a DAW, matching the behaviour in the folder file list.
+- **Playlist track context menu** — Right-clicking a matched track in the playlist panel shows a context menu with Copy, Show in Finder, and Show in Library.
+- **Show in Library** — "Show in Library" navigates to the file's watched folder in the file list, selects the track, and auto-scrolls to it so you can see it in context alongside neighbouring files.
+
 ## v1.1.0
 
 - **Album art throughout the app** — Album artwork from the MFB catalogue now appears in file list rows, the player bar, the properties panel header, playlist panel header and track rows, the missing track panel, and the playlist sidebar. Previously-matched files that predate this feature are back-filled silently on next login.
