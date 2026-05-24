@@ -571,10 +571,10 @@ export default function App(): JSX.Element {
       )}
 
       {!catalogueLoaded ? null : hasContent && !showWelcome ? (
-        <div className="flex flex-1 min-h-0">
-          <FolderPanel onAddFolder={handleAddFolder} />
-          <div className="flex flex-col flex-1 min-h-0 min-w-0">
-            <div className="flex flex-1 min-h-0">
+        <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex flex-1 min-h-0">
+            <FolderPanel onAddFolder={handleAddFolder} onRescan={handleRescan} />
+            <div className="flex flex-1 min-h-0 min-w-0">
               {playlistTrackQuery ? <PlaylistTrackSearch /> : selectedPlaylistId !== null ? <PlaylistPanel /> : <FileList />}
               {(selectedFileId || selectedMissingTrackId) && (
                 <div className="w-96 border-l shrink-0 border-surface-border">
@@ -582,8 +582,8 @@ export default function App(): JSX.Element {
                 </div>
               )}
             </div>
-            <PlayerBar />
           </div>
+          <PlayerBar />
         </div>
       ) : (
         <WelcomeScreen

@@ -5,6 +5,7 @@ import { syncLibraryToMfb } from '../lib/syncLibrary'
 
 interface Props {
   onAddFolder: (folderPath?: string) => void
+  onRescan: () => void
 }
 
 type PanelMode = 'folders' | 'tags' | 'playlists'
@@ -50,7 +51,7 @@ function buildSidebarTags(files: { tags: readonly string[] }[]): [string, number
   return [...ordered, ...extras]
 }
 
-export function FolderPanel({ onAddFolder }: Props): JSX.Element {
+export function FolderPanel({ onAddFolder, onRescan }: Props): JSX.Element {
   const [mode, setMode] = useState<PanelMode>('folders')
   const [isDragOver, setIsDragOver] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; folderId: string } | null>(null)
@@ -527,7 +528,7 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
         </div>
       </div>
 
-      {/* Footer — add folder (folders mode) · clear tags (tags mode, when any selected) · refresh playlists */}
+      {/* Footer */}
       <div className="flex flex-col gap-1 p-2 border-t border-surface-border shrink-0">
         {mode === 'tags' && selectedTags.length > 0 && (
           <button
@@ -542,90 +543,101 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
             Clear tags ({selectedTags.length})
           </button>
         )}
-        {mode === 'playlists' && userAccount && (
+        {mode === 'tags' && selectedTags.length === 0 && sidebarTags.length > 0 && (
+          <p className="text-center text-[10px] text-gray-600 py-0.5">
+            {sidebarTags.length} tag{sidebarTags.length === 1 ? '' : 's'}
+          </p>
+        )}
+
+        {/* Folders mode: Sync + Add in compact 2-column grid */}
+        {mode === 'folders' && (
+          <div className="grid gap-1" style={{ gridTemplateColumns: userAccount && matchedFiles > 0 ? '1fr 1fr' : '1fr' }}>
+            {userAccount && matchedFiles > 0 && (
+              <button
+                type="button"
+                disabled={syncing}
+                onClick={async () => {
+                  setSyncing(true)
+                  setSyncDone(false)
+                  await syncLibraryToMfb()
+                  setSyncing(false)
+                  setSyncDone(true)
+                  if (syncDoneTimerRef.current) clearTimeout(syncDoneTimerRef.current)
+                  syncDoneTimerRef.current = setTimeout(() => setSyncDone(false), 2500)
+                }}
+                className="flex items-center justify-center gap-1 h-6 text-[10px] transition-colors rounded border border-surface-border bg-surface-hover hover:bg-surface-border disabled:opacity-40 text-accent/70 hover:text-accent"
+                title="Sync library matches to Music for Breathwork"
+              >
+                {syncDone ? (
+                  <>
+                    <svg className="w-2.5 h-2.5 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M2 6l3 3 5-5" />
+                    </svg>
+                    Synced
+                  </>
+                ) : syncing ? (
+                  <>
+                    <svg className="w-2.5 h-2.5 animate-spin shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                      <path d="M6 1v2M6 9v2M1 6h2M9 6h2" />
+                    </svg>
+                    Syncing…
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-2.5 h-2.5 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10.5 6A4.5 4.5 0 1 1 6 1.5" />
+                      <path d="M6 1.5l2.5-1M6 1.5l1 2.5" />
+                    </svg>
+                    Sync M4B
+                  </>
+                )}
+              </button>
+            )}
+            <button
+              onClick={() => onAddFolder()}
+              disabled={scanning}
+              className="flex items-center justify-center gap-1 h-6 text-[10px] text-gray-400 hover:text-gray-300 transition-colors rounded border border-surface-border bg-surface-hover hover:bg-surface-border disabled:opacity-40"
+            >
+              <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round">
+                <path d="M6 2v8M2 6h8" />
+              </svg>
+              Add Folder
+            </button>
+          </div>
+        )}
+
+        {/* Bottom row: refresh button */}
+        {(mode === 'folders' || (mode === 'playlists' && userAccount)) && (
           <button
             type="button"
-            disabled={loadingPlaylists}
+            title={mode === 'folders' ? 'Rescan folders' : 'Refresh playlists'}
+            disabled={mode === 'folders' ? scanning : loadingPlaylists}
             onClick={() => {
-              setLoadingPlaylists(true)
-              window.electronAPI.getUserPlaylists()
-                .then(setPlaylists)
-                .finally(() => setLoadingPlaylists(false))
+              if (mode === 'folders') {
+                onRescan()
+              } else if (mode === 'playlists' && userAccount) {
+                setLoadingPlaylists(true)
+                window.electronAPI.getUserPlaylists()
+                  .then(setPlaylists)
+                  .finally(() => setLoadingPlaylists(false))
+              }
             }}
-            className="w-full flex items-center justify-center gap-1.5 h-6 text-[11px] text-gray-500 hover:text-gray-300 transition-colors rounded hover:bg-surface-hover disabled:opacity-40"
+            className="w-full flex items-center justify-center gap-1 h-6 text-[10px] text-gray-400 hover:text-gray-300 transition-colors rounded border border-surface-border bg-surface-hover hover:bg-surface-border disabled:opacity-40"
           >
-            <svg className="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              className={`w-2.5 h-2.5 shrink-0 ${(mode === 'folders' && scanning) || (mode === 'playlists' && loadingPlaylists) ? 'animate-spin' : ''}`}
+              viewBox="0 0 12 12"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M10.5 6A4.5 4.5 0 1 1 6 1.5" />
               <path d="M6 1.5l2.5-1M6 1.5l1 2.5" />
             </svg>
             Refresh
           </button>
-        )}
-        {mode === 'folders' && userAccount && matchedFiles > 0 && (
-          <button
-            type="button"
-            disabled={syncing}
-            onClick={async () => {
-              setSyncing(true)
-              setSyncDone(false)
-              await syncLibraryToMfb()
-              setSyncing(false)
-              setSyncDone(true)
-              if (syncDoneTimerRef.current) clearTimeout(syncDoneTimerRef.current)
-              syncDoneTimerRef.current = setTimeout(() => setSyncDone(false), 2500)
-            }}
-            className="w-full flex items-center justify-center gap-1.5 h-6 text-[10px] transition-colors rounded hover:bg-surface-hover disabled:opacity-40 text-accent/70 hover:text-accent uppercase"
-          >
-            {syncDone ? (
-              <>
-                <svg className="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M2 6l3 3 5-5" />
-                </svg>
-                Synced
-              </>
-            ) : syncing ? (
-              <>
-                <svg className="w-3 h-3 animate-spin shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <path d="M6 1v2M6 9v2M1 6h2M9 6h2" />
-                </svg>
-                Syncing…
-              </>
-            ) : (
-              <>
-                <svg className="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M10.5 6A4.5 4.5 0 1 1 6 1.5" />
-                  <path d="M6 1.5l2.5-1M6 1.5l1 2.5" />
-                </svg>
-                Sync with M4B
-              </>
-            )}
-          </button>
-        )}
-        {mode === 'folders' && (
-          <button
-            onClick={() => onAddFolder()}
-            disabled={scanning}
-            className="w-full flex items-center justify-center gap-1.5 h-6 text-[10px] text-gray-400 hover:text-gray-300 transition-colors rounded hover:bg-surface-hover uppercase"
-          >
-            {scanning ? (
-              <span className="text-accent">Scanning…</span>
-            ) : (
-              <>
-                <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round">
-                  <path d="M6 2v8M2 6h8" />
-                </svg>
-                Add Folder
-              </>
-            )}
-          </button>
-        )}
-        {totalFiles > 0 && (
-          <p className="text-center text-[10px] text-gray-400 mt-1">
-            <span className={matchedFiles === totalFiles ? 'text-accent' : 'text-gray-200'}>
-              {matchedFiles}
-            </span>
-            <span> / {totalFiles} matched</span>
-          </p>
         )}
       </div>
 

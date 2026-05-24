@@ -259,41 +259,40 @@ export function PlayerBar(): JSX.Element | null {
     }
   }, [checkState])
 
-  const updateBadge = (
-    <span className="flex items-center gap-1.5 text-[10px] text-gray-700 select-none tabular-nums shrink-0">
-      {readyVersion ? (
-        <button
-          onClick={() => window.electronAPI.quitAndInstall()}
-          className="text-indigo-400 underline cursor-pointer hover:text-indigo-300 underline-offset-2"
-        >
-          Update ready — restart to install
-        </button>
-      ) : downloading ? (
-        <>
-          <svg className="animate-spin h-2.5 w-2.5 text-indigo-500 shrink-0" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-          </svg>
-          <span className="text-indigo-500">
-            Downloading update{downloadPercent > 0 ? ` ${downloadPercent}%` : '…'}
-          </span>
-        </>
-      ) : checkState === 'checking' ? (
-        <span className="text-gray-500">Checking…</span>
-      ) : checkState === 'upToDate' ? (
-        <span className="text-gray-500">Up to date</span>
-      ) : (
-        <button
-          type="button"
-          onClick={handleCheckForUpdates}
-          title="Check for updates"
-          className="text-gray-600 underline cursor-pointer hover:text-gray-300 underline-offset-2"
-        >
-          Check for updates
-        </button>
-      )}
-      <span>v{__APP_VERSION__}</span>
-    </span>
+  const updateBadge = readyVersion ? (
+    <button
+      type="button"
+      onClick={() => window.electronAPI.quitAndInstall()}
+      className="flex items-center gap-1 text-[10px] text-accent hover:text-accent/80 transition-colors shrink-0"
+      title={`Install update v${readyVersion} and restart`}
+    >
+      <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 1v6M2 5l3 3 3-3" />
+        <path d="M1 9h8" />
+      </svg>
+      v{readyVersion}
+    </button>
+  ) : downloading ? (
+    <div className="flex items-center gap-1 text-[10px] text-gray-500 shrink-0">
+      <svg className="animate-spin w-2.5 h-2.5 text-accent shrink-0" viewBox="0 0 24 24" fill="none">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+      </svg>
+      {downloadPercent > 0 ? `${downloadPercent}%` : '…'}
+    </div>
+  ) : checkState === 'checking' ? (
+    <span className="text-[10px] text-gray-600 shrink-0">checking…</span>
+  ) : checkState === 'upToDate' ? (
+    <span className="text-[10px] text-gray-600 shrink-0">up to date</span>
+  ) : (
+    <button
+      type="button"
+      onClick={handleCheckForUpdates}
+      title="Check for updates"
+      className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors tabular-nums shrink-0"
+    >
+      v{__APP_VERSION__}
+    </button>
   )
 
   if (!file) {

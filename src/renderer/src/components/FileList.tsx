@@ -1052,12 +1052,20 @@ export function FileList(): JSX.Element {
       })()}
 
       {/* Footer count */}
-      <div className="h-6 shrink-0 flex items-center px-3 border-t border-surface-border text-[10px] text-gray-300 select-none">
-        {files.length} file{files.length === 1 ? '' : 's'}
-        {q && allFiles.length > files.length && (
-          <span className="ml-1 text-gray-300">of {allFiles.length}</span>
+      <div className="h-6 shrink-0 flex items-center justify-between px-3 border-t border-surface-border text-[10px] text-gray-600 select-none">
+        <span>
+          {files.length} file{files.length === 1 ? '' : 's'}
+          {q && allFiles.length > files.length && (
+            <span className="ml-1">of {allFiles.length}</span>
+          )}
+          {scanning && <span className="ml-2 text-accent">Scanning…</span>}
+        </span>
+        {allFiles.length > 0 && (
+          <span className="text-gray-600">
+            <span className={allFiles.length - unmatchedCount === allFiles.length ? 'text-accent' : 'text-gray-400'}>{allFiles.length - unmatchedCount}</span>
+            {' / '}{allFiles.length} matched
+          </span>
         )}
-        {scanning && <span className="ml-2 text-accent">Scanning…</span>}
       </div>
     </div>
   )

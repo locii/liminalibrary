@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.6
+
+- **Full-width transport bar** — The player bar now spans the entire window width, sitting below the folder panel and content area rather than only the right column.
+- **Folder panel footer redesigned** — Sync M4B and Add Folder sit in a compact two-column grid. A Refresh button (rescan in folders mode, refresh playlists in playlists mode) replaces the old full-width buttons. The matched count moves to the file list footer.
+- **Matched count in file list footer** — The file list footer now shows `N / M matched` on the right alongside the file count, visible at all times.
+- **Tag count in tags pane** — When no tags are selected in the tags panel, the footer shows the total number of tags in the library.
+- **Version badge** — The version/update badge in the player bar now matches the Limina Mix design: version number is a tap-to-check button; shows a download icon and version when an update is ready.
+
 ## v1.1.5
 
 - **Player bar audio fix** — Fixed a race condition where switching tracks while audio was playing could cause `play()` to be interrupted by a stale `pause()` call, resulting in silence. The `playing` state is now tracked via a ref so the audio-source coordination handler always reads the current value synchronously.
