@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.3
+
+- **Re-fetch from MFB fix** — Re-fetching track data no longer wipes the existing MFB metadata when the session token is expired or invalid. The button is now only shown when logged in, since the MFB API requires authentication.
+
 ## v1.1.2
 
 - **Now Playing overlay** — Clicking the album art or track name in the player bar opens a full-screen overlay with a large album image, blurred background underlay, waveform, transport controls, and phase/tag chips. Clicking any tag filters the file list to that tag and closes the overlay. The MFB track title links directly to the track page on musicforbreathwork.com.

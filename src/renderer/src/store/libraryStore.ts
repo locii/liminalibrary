@@ -248,8 +248,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     const match = s.pendingMatches[fileId]
     if (!match) return {}
     const { [fileId]: _, ...rest } = s.pendingMatches
-    const artist = match.artists.map((a: { name: string }) => a.name).join(', ')
-    const allTags: MfbTag[] = ([] as MfbTag[]).concat(...Object.values(match.tags))
+    const artist = (match.artists ?? []).map((a: { name: string }) => a.name).join(', ')
+    const allTags: MfbTag[] = ([] as MfbTag[]).concat(...Object.values(match.tags ?? {}))
     const tags = allTags.map((t) => t.name)
     const hourTag = match.tags['Hour']?.[0]
     return {
@@ -286,12 +286,12 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     const updatedFiles = s.files.map((f) => {
       const match = s.pendingMatches[f.id]
       if (!match) return f
-      const artist = match.artists.map((a: { name: string }) => a.name).join(', ')
-      const allTags: MfbTag[] = ([] as MfbTag[]).concat(...Object.values(match.tags))
+      const artist = (match.artists ?? []).map((a: { name: string }) => a.name).join(', ')
+      const allTags: MfbTag[] = ([] as MfbTag[]).concat(...Object.values(match.tags ?? {}))
       const tags = allTags.map((t) => t.name)
-      const hourTag = match.tags['Hour']?.[0]
+      const hourTag = (match.tags ?? {})['Hour']?.[0]
       return {
-        ...f, artist, album: match.album.title, tags, notes: match.description ?? '',
+        ...f, artist, album: match.album?.title ?? '', tags, notes: match.description ?? '',
         trackTitle: match.title, mfbTrackId: match.id, mfbApplied: true, appliedPathGuess: true,
         albumImageUrl: match.album.image_url ?? null,
         audioFeatures: match.audio_features ?? null,

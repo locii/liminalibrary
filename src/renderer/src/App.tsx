@@ -99,6 +99,12 @@ export default function App(): JSX.Element {
           }
         }
       } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        if (msg === 'NOT_AUTHENTICATED') {
+          console.warn('[mfb:match] not authenticated — indexing stopped')
+          cancelledRef.current = true
+          return
+        }
         console.error('[mfb:match] error', err)
         if (!cancelledRef.current) {
           for (const f of batch) useLibraryStore.getState().updateFile(f.id, { mfbIndexed: true })
@@ -187,7 +193,10 @@ export default function App(): JSX.Element {
           if (data?.album?.image_url) {
             useLibraryStore.getState().updateFile(f.id, { albumImageUrl: data.album.image_url })
           }
-        } catch { /* ignore per-track failures */ }
+        } catch (err) {
+          if (err instanceof Error && err.message === 'NOT_AUTHENTICATED') break
+          /* ignore other per-track failures */
+        }
       }
     })()
   // eslint-disable-next-line react-hooks/exhaustive-deps

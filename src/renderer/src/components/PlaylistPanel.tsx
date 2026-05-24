@@ -229,6 +229,13 @@ async function buildLiminaSession(detail: MfbPlaylistDetail, files: LibraryFile[
         crossfadeOut: 0,
         volume: 1,
         automation: [],
+        // MFB metadata — used by Limina Mix for the Now Playing overlay and clip properties
+        mfbTrackId: track.id,
+        mfbTrackTitle: track.title,
+        mfbArtist: track.artist,
+        mfbAlbumImageUrl: track.album_image_url || file.albumImageUrl || null,
+        mfbTags: file.tags.length > 0 ? file.tags : [],
+        mfbBreathworkPhase: file.breathworkPhase ?? null,
       })
 
       // Position next clip so its fade-in ends exactly when this clip ends

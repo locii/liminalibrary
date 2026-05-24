@@ -413,7 +413,7 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
           )
         ) : !userAccount ? (
           <p className="px-3 py-4 text-[11px] text-gray-600 text-center leading-relaxed">
-            Sign in to view your MFB playlists
+            Sign in to view your<br /> Music for Breathwork playlists
           </p>
         ) : loadingPlaylists ? (
           <p className="px-3 py-3 text-[10px] text-gray-500">Loading…</p>
@@ -508,7 +508,7 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
               >
                 <div className="flex gap-2 items-center min-w-0">
                   {playlist.image_url ? (
-                    <img src={playlist.image_url} alt="" className="w-4 h-4 rounded shrink-0 object-cover" />
+                    <img src={playlist.image_url} alt="" className="object-cover w-4 h-4 rounded shrink-0" />
                   ) : (
                     <svg className="w-3 h-3 text-gray-600 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M1 3h8M1 6h6M1 9h4" />

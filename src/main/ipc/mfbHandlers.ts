@@ -25,8 +25,14 @@ function fetchJson<T>(url: string, token?: string | null): Promise<T> {
       const chunks: Buffer[] = []
       res.on('data', (c: Buffer) => chunks.push(c))
       res.on('end', () => {
-        try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf-8')) as T) }
-        catch (e) { reject(new Error(`JSON parse error: ${e}`)) }
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString('utf-8'))
+          if ((res.statusCode ?? 0) >= 400) {
+            reject(new Error(res.statusCode === 401 ? 'NOT_AUTHENTICATED' : `HTTP ${res.statusCode}`))
+          } else {
+            resolve(body as T)
+          }
+        } catch (e) { reject(new Error(`JSON parse error: ${e}`)) }
       })
       res.on('error', reject)
     }).on('error', reject)
@@ -35,15 +41,15 @@ function fetchJson<T>(url: string, token?: string | null): Promise<T> {
 
 async function getCatalogue(): Promise<CatalogueTrack[]> {
   const token = await loadToken()
-  const isAuthed = !!token
+  if (!token) throw new Error('NOT_AUTHENTICATED')
   // Bust cache if auth state changed (logged in/out since last fetch)
-  if (catalogueCache && Date.now() - catalogueCacheTime < CACHE_TTL_MS && catalogueCacheAuthed === isAuthed) {
+  if (catalogueCache && Date.now() - catalogueCacheTime < CACHE_TTL_MS && catalogueCacheAuthed) {
     return catalogueCache
   }
-  console.log('[mfb] fetching catalogue...', isAuthed ? '(authenticated)' : '(unauthenticated)')
+  console.log('[mfb] fetching catalogue (authenticated)...')
   catalogueCache = await fetchJson<CatalogueTrack[]>(`${BASE}/tracks`, token)
   catalogueCacheTime = Date.now()
-  catalogueCacheAuthed = isAuthed
+  catalogueCacheAuthed = true
   console.log('[mfb] catalogue loaded:', catalogueCache.length, 'tracks')
   return catalogueCache
 }
@@ -165,11 +171,14 @@ export function registerMfbHandlers(): void {
   })
 
   ipcMain.handle('mfb:getTrack', async (_, id: number) => {
-    return fetchJson(`${BASE}/tracks/${id}`)
+    const token = await loadToken()
+    if (!token) throw new Error('NOT_AUTHENTICATED')
+    return fetchJson(`${BASE}/tracks/${id}`, token)
   })
 
   ipcMain.handle('mfb:matchTracks', async (_, entries: MatchEntry[]) => {
-    const catalogue = await getCatalogue()
+    const catalogue = await getCatalogue() // throws NOT_AUTHENTICATED if no token
+    const token = await loadToken()
     const THRESHOLD = 0.25
 
     return Promise.all(entries.map(async (entry) => {
@@ -193,7 +202,7 @@ export function registerMfbHandlers(): void {
           album: { id: number; title: string; image_url: string }
           tags: Record<string, { id: number; name: string; slug: { en: string } }[]>
           audio_features?: Record<string, unknown>
-        }>(`${BASE}/tracks/${bestTrack.id}`)
+        }>(`${BASE}/tracks/${bestTrack.id}`, token)
         return {
           id: entry.id,
           track: {

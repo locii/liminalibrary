@@ -247,7 +247,7 @@ export function PropertiesPanel(): JSX.Element {
           </div>
           <p className="text-[11px] text-gray-200 truncate">{pendingMatch.title}</p>
           <p className="text-[10px] text-gray-300 truncate">
-            {pendingMatch.artists.map((a) => a.name).join(', ')} · {pendingMatch.album.title}
+            {(pendingMatch.artists ?? []).map((a) => a.name).join(', ')} · {pendingMatch.album?.title}
           </p>
           {pendingMatchLinkedCount > 0 && (
             <div className="flex flex-col gap-1">
@@ -406,6 +406,7 @@ export function PropertiesPanel(): JSX.Element {
 
                 {file.mfbTrackId && (
                   <>
+                    {userAccount && (
                     <button
                       type="button"
                       disabled={rescanning}
@@ -420,9 +421,9 @@ export function PropertiesPanel(): JSX.Element {
                             album: { id: number; title: string; image_url: string }
                             tags: Record<string, { id: number; name: string; slug: { en: string } }[]>
                             audio_features?: MfbAudioFeatures
-                            bandcamp_url?: string
-                            beatport_url?: string
+                            streaming?: { bandcamp_url?: string; beatport_url?: string }
                           }
+                          if (!data?.id || !data?.title) return
                           const tagsData = data.tags ?? {}
                           const artist = (data.artists ?? []).map((a) => a.name).join(', ')
                           const tags = Object.values(tagsData).flat().map((t) => t.name)
@@ -435,8 +436,8 @@ export function PropertiesPanel(): JSX.Element {
                             appliedPathGuess: true,
                             albumImageUrl: data.album?.image_url ?? null,
                             audioFeatures: data.audio_features ?? null,
-                            bandcampUrl: data.bandcamp_url ?? null,
-                            beatportUrl: data.beatport_url ?? null,
+                            bandcampUrl: data.streaming?.bandcamp_url ?? null,
+                            beatportUrl: data.streaming?.beatport_url ?? null,
                             ...(hourSlug ? { breathworkPhase: hourSlug as import('../types').BreathworkPhase } : {}),
                           })
                           if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
@@ -453,6 +454,7 @@ export function PropertiesPanel(): JSX.Element {
                       </svg>
                       Re-fetch from MFB
                     </button>
+                    )}
 
                     <button
                       type="button"
@@ -694,7 +696,7 @@ export function PropertiesPanel(): JSX.Element {
         <SectionHeader label="Tags" open={sections.tags} onToggle={() => toggleSection('tags')} />
         {sections.tags && (
           <div className="flex flex-wrap gap-1 mt-1">
-            {file.tags.map((tag) => (
+            {(file.tags ?? []).map((tag) => (
               <span
                 key={tag}
                 className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded bg-surface-hover border border-surface-border text-gray-200"
