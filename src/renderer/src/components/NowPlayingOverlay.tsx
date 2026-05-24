@@ -20,12 +20,6 @@ function pickColor(fileId: string): [string, string] {
   return WAVEFORM_COLORS[hash % WAVEFORM_COLORS.length]
 }
 
-function formatTime(s: number): string {
-  const m = Math.floor(s / 60)
-  const sec = Math.floor(s % 60)
-  return `${m}:${String(sec).padStart(2, '0')}`
-}
-
 interface Props {
   file: LibraryFile
   albumImageUrl: string | null | undefined
@@ -35,7 +29,6 @@ interface Props {
   hasNext: boolean
   onTogglePlay: () => void
   onNavigate: (dir: -1 | 1) => void
-  onSeek: (t: number) => void
   onClose: () => void
 }
 
@@ -48,7 +41,6 @@ export function NowPlayingOverlay({
   hasNext,
   onTogglePlay,
   onNavigate,
-  onSeek,
   onClose,
 }: Props): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -116,13 +108,6 @@ export function NowPlayingOverlay({
     }
   }, [file?.peaks, file?.peaks.length, currentTime, file?.duration, file?.id, canvasWidth])
 
-  const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>): void => {
-    const canvas = canvasRef.current
-    if (!canvas || file.duration === 0) return
-    const rect = canvas.getBoundingClientRect()
-    onSeek(((e.clientX - rect.left) / rect.width) * file.duration)
-  }, [file.duration, onSeek])
-
   const selectTag = useLibraryStore((s) => s.selectTag)
 
   const handleTagClick = useCallback((tag: string): void => {
@@ -134,8 +119,6 @@ export function NowPlayingOverlay({
   const phaseLabel = phase ? (BREATHWORK_PHASES.find((p) => p.value === phase)?.label ?? null) : null
   const phaseColor = phase ? PHASE_COLORS[phase] : null
   const [waveColor] = pickColor(file.id)
-
-  const progress = file.duration > 0 ? currentTime / file.duration : 0
 
   return (
     <div

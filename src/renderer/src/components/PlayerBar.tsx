@@ -48,6 +48,8 @@ export function PlayerBar(): JSX.Element | null {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rafRef = useRef<number | null>(null)
   const [playing, setPlaying] = useState(false)
+  const playingRef = useRef(false)
+  playingRef.current = playing
   const [currentTime, setCurrentTime] = useState(0)
   const [port, setPort] = useState<number | null>(null)
   const [canvasWidth, setCanvasWidth] = useState(0)
@@ -74,9 +76,14 @@ export function PlayerBar(): JSX.Element | null {
   useEffect(() => {
     if (!file || port === null) return
     audioRef.current?.pause()
+    // Reset playing synchronously so the app:audio-start handler won't pause
+    // the new audio while its play() promise is still pending.
+    playingRef.current = false
+    setPlaying(false)
     const audio = new Audio(`http://127.0.0.1:${port}${encodeURI(file.filePath)}?sr=${file.sampleRate ?? 0}`)
     audioRef.current = audio
     setCurrentTime(0)
+    let cancelled = false
     audio.addEventListener('ended', () => {
       setPlaying(false)
       setCurrentTime(0)
@@ -89,10 +96,18 @@ export function PlayerBar(): JSX.Element | null {
       }
     })
     audio.play().then(() => {
+      if (cancelled) return
+      playingRef.current = true
       setPlaying(true)
       window.dispatchEvent(new CustomEvent('app:audio-start', { detail: 'player' }))
-    }).catch(console.error)
-    return () => { audio.pause() }
+    }).catch((e) => {
+      if (!cancelled) console.error(e)
+    })
+    return () => {
+      cancelled = true
+      playingRef.current = false
+      audio.pause()
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file?.id, port])
 
@@ -120,14 +135,15 @@ export function PlayerBar(): JSX.Element | null {
   // Stop when another audio source starts
   useEffect(() => {
     const handler = (e: Event): void => {
-      if ((e as CustomEvent).detail !== 'player' && playing) {
+      if ((e as CustomEvent).detail !== 'player' && playingRef.current) {
+        playingRef.current = false
         audioRef.current?.pause()
         setPlaying(false)
       }
     }
     window.addEventListener('app:audio-start', handler)
     return () => window.removeEventListener('app:audio-start', handler)
-  }, [playing])
+  }, [])
 
   // Draw waveform
   useEffect(() => {
@@ -172,16 +188,18 @@ export function PlayerBar(): JSX.Element | null {
   const togglePlay = useCallback((): void => {
     const audio = audioRef.current
     if (!audio) return
-    if (playing) {
+    if (playingRef.current) {
+      playingRef.current = false
       audio.pause()
       setPlaying(false)
     } else {
       audio.play().then(() => {
+        playingRef.current = true
         setPlaying(true)
         window.dispatchEvent(new CustomEvent('app:audio-start', { detail: 'player' }))
       }).catch(console.error)
     }
-  }, [playing])
+  }, [])
 
   const handleSeek = useCallback((e: React.MouseEvent<HTMLCanvasElement>): void => {
     const canvas = canvasRef.current
@@ -192,13 +210,6 @@ export function PlayerBar(): JSX.Element | null {
     audio.currentTime = t
     setCurrentTime(t)
   }, [file?.duration])
-
-  const handleSeekTime = useCallback((t: number): void => {
-    const audio = audioRef.current
-    if (!audio) return
-    audio.currentTime = t
-    setCurrentTime(t)
-  }, [])
 
   const navigate = useCallback((dir: -1 | 1): void => {
     if (!file) return
@@ -225,6 +236,7 @@ export function PlayerBar(): JSX.Element | null {
   }, [file, navigate])
 
   const close = useCallback((): void => {
+    playingRef.current = false
     audioRef.current?.pause()
     audioRef.current = null
     setPreview(null, [])
@@ -422,7 +434,6 @@ export function PlayerBar(): JSX.Element | null {
           hasNext={hasNext || shuffle}
           onTogglePlay={togglePlay}
           onNavigate={navigate}
-          onSeek={handleSeekTime}
           onClose={() => setOverlayOpen(false)}
         />
       )}

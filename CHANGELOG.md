@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.5
+
+- **Player bar audio fix** — Fixed a race condition where switching tracks while audio was playing could cause `play()` to be interrupted by a stale `pause()` call, resulting in silence. The `playing` state is now tracked via a ref so the audio-source coordination handler always reads the current value synchronously.
+
 ## v1.1.4
 
 - **Now Playing overlay simplified** — The waveform and time display have been removed from the Now Playing overlay, leaving a cleaner layout focused on album art, track info, phase/tag chips, and transport controls.
