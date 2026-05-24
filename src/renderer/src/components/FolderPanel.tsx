@@ -80,6 +80,12 @@ export function FolderPanel({ onAddFolder }: Props): JSX.Element {
   const selectedFolderId = useLibraryStore((s) => s.selectedFolderId)
   const selectedTags = useLibraryStore((s) => s.selectedTags)
   const selectedPlaylistId = useLibraryStore((s) => s.selectedPlaylistId)
+
+  // Auto-switch to tags tab when a tag is selected from outside this panel
+  useEffect(() => {
+    if (selectedTags.length > 0 && mode !== 'tags') setMode('tags')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTags.length])
   const selectFolder = useLibraryStore((s) => s.selectFolder)
   const toggleSelectedTag = useLibraryStore((s) => s.toggleSelectedTag)
   const clearSelectedTags = useLibraryStore((s) => s.clearSelectedTags)

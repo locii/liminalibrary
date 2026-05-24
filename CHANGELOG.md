@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.2
+
+- **Now Playing overlay** — Clicking the album art or track name in the player bar opens a full-screen overlay with a large album image, blurred background underlay, waveform, transport controls, and phase/tag chips. Clicking any tag filters the file list to that tag and closes the overlay. The MFB track title links directly to the track page on musicforbreathwork.com.
+
 ## v1.1.1
 
 - **Search tracks across all playlists** — A search box in the playlist sidebar lets you find any track across all your MFB playlists. Results show which playlists contain the track, whether it's in your library, and buy links. Clicking a result jumps straight to that playlist.

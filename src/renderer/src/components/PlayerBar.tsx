@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useLibraryStore } from '../store/libraryStore'
 import { useUpdaterStore } from '../store/updaterStore'
+import { NowPlayingOverlay } from './NowPlayingOverlay'
 
 const WAVEFORM_COLORS: [string, string][] = [
   ['#6366f1', '#818cf8'],
@@ -54,6 +55,7 @@ export function PlayerBar(): JSX.Element | null {
   const [shuffle, setShuffle] = useState(false)
   const shuffleRef = useRef(false)
   shuffleRef.current = shuffle
+  const [overlayOpen, setOverlayOpen] = useState(false)
 
   useEffect(() => {
     window.electronAPI.getAudioServerPort().then(setPort)
@@ -190,6 +192,13 @@ export function PlayerBar(): JSX.Element | null {
     audio.currentTime = t
     setCurrentTime(t)
   }, [file?.duration])
+
+  const handleSeekTime = useCallback((t: number): void => {
+    const audio = audioRef.current
+    if (!audio) return
+    audio.currentTime = t
+    setCurrentTime(t)
+  }, [])
 
   const navigate = useCallback((dir: -1 | 1): void => {
     if (!file) return
@@ -346,10 +355,27 @@ export function PlayerBar(): JSX.Element | null {
       </div>
 
       {/* Album art + track info */}
-      <div className="flex gap-2 items-center w-44 min-w-0 shrink-0">
-        {albumImageUrl && (
-          <img src={albumImageUrl} alt="" className="object-cover w-10 h-10 rounded shrink-0" />
-        )}
+      <div
+        className="group flex gap-2 items-center w-44 min-w-0 shrink-0 cursor-pointer"
+        onClick={() => setOverlayOpen(true)}
+        title="Expand now playing"
+      >
+        <div className="relative shrink-0">
+          {albumImageUrl ? (
+            <img src={albumImageUrl} alt="" className="object-cover w-10 h-10 rounded" />
+          ) : (
+            <div className="w-10 h-10 rounded bg-surface-hover flex items-center justify-center">
+              <svg className="w-4 h-4 text-gray-600" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 3v10.55A4 4 0 1014 17V7h4V3h-6z" />
+              </svg>
+            </div>
+          )}
+          <div className="absolute inset-0 flex items-center justify-center rounded bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+            <svg className="w-3.5 h-3.5 text-white" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7 1h4v4M5 7L11 1M1 5v6h6" />
+            </svg>
+          </div>
+        </div>
         <div className="flex flex-col justify-center min-w-0">
           <span className="text-[11px] text-gray-200 truncate leading-tight">{file.trackTitle || file.fileName}</span>
           {file.artist && <span className="text-[10px] text-gray-500 truncate leading-tight mt-0.5">{file.artist}</span>}
@@ -385,6 +411,21 @@ export function PlayerBar(): JSX.Element | null {
           <path d="M2 2l8 8M10 2l-8 8" />
         </svg>
       </button>
+
+      {overlayOpen && (
+        <NowPlayingOverlay
+          file={file}
+          albumImageUrl={albumImageUrl}
+          playing={playing}
+          currentTime={currentTime}
+          hasPrev={hasPrev}
+          hasNext={hasNext || shuffle}
+          onTogglePlay={togglePlay}
+          onNavigate={navigate}
+          onSeek={handleSeekTime}
+          onClose={() => setOverlayOpen(false)}
+        />
+      )}
     </div>
   )
 }
