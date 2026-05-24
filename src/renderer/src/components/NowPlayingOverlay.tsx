@@ -139,7 +139,7 @@ export function NowPlayingOverlay({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-md select-none overflow-hidden"
+      className="flex overflow-hidden fixed inset-0 z-50 flex-col justify-center items-center backdrop-blur-md select-none bg-black/90"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       {/* Close */}
@@ -147,7 +147,7 @@ export function NowPlayingOverlay({
         type="button"
         onClick={onClose}
         title="Close (Esc)"
-        className="absolute top-4 right-4 flex items-center justify-center w-8 h-8 rounded-full text-gray-500 hover:text-white hover:bg-white/10 transition-colors"
+        className="flex absolute top-4 right-4 justify-center items-center w-8 h-8 text-gray-500 rounded-full transition-colors hover:text-white hover:bg-white/10"
       >
         <svg className="w-4 h-4" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
           <path d="M2 2l8 8M10 2l-8 8" />
@@ -159,14 +159,14 @@ export function NowPlayingOverlay({
         <img
           src={albumImageUrl}
           alt=""
-          className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+          className="object-cover absolute inset-0 w-full h-full pointer-events-none"
           style={{ opacity: 0.1 }}
         />
       )}
 
-      <div className="relative flex flex-col items-center w-full max-w-lg px-8 gap-6">
+      <div className="flex relative flex-col gap-6 items-center px-8 w-full max-w-lg">
         {/* Album art */}
-        <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-2xl">
+        <div className="overflow-hidden relative w-full rounded-xl shadow-2xl aspect-square">
           {albumImageUrl ? (
             <img
               key={file.id}
@@ -207,7 +207,7 @@ export function NowPlayingOverlay({
             )}
           </span>
           {file.artist && (
-            <span className="text-gray-400 text-sm">{file.artist}</span>
+            <span className="text-sm text-gray-400">{file.artist}</span>
           )}
 
           {/* Phase + tags */}
@@ -237,35 +237,16 @@ export function NowPlayingOverlay({
           )}
         </div>
 
-        {/* Waveform + time */}
-        <div className="w-full flex flex-col gap-1">
-          <canvas
-            ref={canvasRef}
-            className="w-full h-10 rounded cursor-pointer"
-            onClick={handleCanvasClick}
-            title="Click to seek"
-          />
-          <div className="flex justify-between text-[10px] font-mono tabular-nums text-gray-600">
-            <span>{formatTime(currentTime)}</span>
-            <span>{formatTime(file.duration)}</span>
-          </div>
-          {/* Progress bar (thin, under waveform for mobile clarity) */}
-          <div className="w-full h-px bg-white/10 rounded-full overflow-hidden -mt-1">
-            <div
-              className="h-full rounded-full transition-none"
-              style={{ width: `${progress * 100}%`, background: waveColor }}
-            />
-          </div>
-        </div>
+       
 
         {/* Transport controls */}
-        <div className="flex items-center gap-4">
+        <div className="flex gap-4 items-center">
           <button
             type="button"
             onClick={() => onNavigate(-1)}
             disabled={!hasPrev}
             title="Previous"
-            className="flex items-center justify-center w-8 h-8 text-gray-500 rounded-full transition-colors hover:text-gray-200 disabled:opacity-25"
+            className="flex justify-center items-center w-8 h-8 text-gray-500 rounded-full transition-colors hover:text-gray-200 disabled:opacity-25"
           >
             <svg className="w-4 h-4" viewBox="0 0 12 12" fill="currentColor">
               <path d="M2 2h1.5v8H2zM10.5 2L4.5 6l6 4V2z" />
@@ -276,7 +257,7 @@ export function NowPlayingOverlay({
             type="button"
             onClick={onTogglePlay}
             title={playing ? 'Pause' : 'Play'}
-            className="flex items-center justify-center w-14 h-14 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20 hover:border-white/40 transition-colors"
+            className="flex justify-center items-center w-14 h-14 text-white rounded-full border transition-colors border-white/20 bg-white/10 hover:bg-white/20 hover:border-white/40"
           >
             {playing ? (
               <svg className="w-5 h-5" viewBox="0 0 10 10" fill="currentColor">
@@ -295,7 +276,7 @@ export function NowPlayingOverlay({
             onClick={() => onNavigate(1)}
             disabled={!hasNext}
             title="Next"
-            className="flex items-center justify-center w-8 h-8 text-gray-500 rounded-full transition-colors hover:text-gray-200 disabled:opacity-25"
+            className="flex justify-center items-center w-8 h-8 text-gray-500 rounded-full transition-colors hover:text-gray-200 disabled:opacity-25"
           >
             <svg className="w-4 h-4" viewBox="0 0 12 12" fill="currentColor">
               <path d="M10 2h-1.5v8H10zM1.5 2l6 4-6 4V2z" />

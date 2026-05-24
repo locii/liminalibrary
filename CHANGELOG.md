@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.4
+
+- **Now Playing overlay simplified** — The waveform and time display have been removed from the Now Playing overlay, leaving a cleaner layout focused on album art, track info, phase/tag chips, and transport controls.
+
 ## v1.1.3
 
 - **Re-fetch from MFB fix** — Re-fetching track data no longer wipes the existing MFB metadata when the session token is expired or invalid. The button is now only shown when logged in, since the MFB API requires authentication.
