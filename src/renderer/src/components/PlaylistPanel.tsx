@@ -24,6 +24,7 @@ const MAX_FADEOUT_S = 20
 const MAX_FADEIN_S = 30
 const MIN_FADE_S = 0.5
 const ANALYZE_TIMEOUT_MS = 15_000
+const NON_CUE_FADEIN_BUFFER_S = 3  // extra fade-in time beyond detected content start for tracks without manual cue points
 
 function windowRMS(data: Float32Array, startSample: number, windowSamples: number): number {
   let sum = 0
@@ -181,7 +182,7 @@ async function buildLiminaSession(detail: MfbPlaylistDetail, files: LibraryFile[
       // Manual cues take priority over waveform analysis (relative to clip bounds)
       const rawFadeIn = file.introEndMs != null
         ? Math.max(0, (file.introEndMs - clipStartMs) / 1000)
-        : analysis.fadeIn
+        : analysis.fadeIn + NON_CUE_FADEIN_BUFFER_S
       const rawFadeOut = file.outroStartMs != null
         ? Math.max(0, (clipEndMs - file.outroStartMs) / 1000)
         : analysis.fadeOut
@@ -198,7 +199,7 @@ async function buildLiminaSession(detail: MfbPlaylistDetail, files: LibraryFile[
         : 0
       const nextRawFadeIn = nextFile?.introEndMs != null
         ? Math.max(0, (nextFile.introEndMs - nextClipStartMs) / 1000)
-        : (nextAnalysis?.fadeIn ?? 0)
+        : (nextAnalysis?.fadeIn ?? 0) + NON_CUE_FADEIN_BUFFER_S
       const nextEffectiveDuration = nextFile
         ? Math.max(0.1, (nextClipEndMs - nextClipStartMs) / 1000)
         : 0
@@ -238,8 +239,12 @@ async function buildLiminaSession(detail: MfbPlaylistDetail, files: LibraryFile[
         mfbBreathworkPhase: file.breathworkPhase ?? null,
       })
 
-      // Position next clip so its fade-in ends exactly when this clip ends
-      cursor = startTime + effectiveDuration - nextFadeIn
+      // With cue points: next clip's fade-in ends exactly when this clip ends.
+      // Without cue points: next clip's fade-in ends exactly when this clip begins to fade out.
+      const hasCuePoints = file.introEndMs != null || file.outroStartMs != null
+      cursor = hasCuePoints
+        ? startTime + effectiveDuration - nextFadeIn
+        : startTime + effectiveDuration - fadeOut - nextFadeIn
       clipIndex++
     }
 

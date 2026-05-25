@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.7
+
+- **Improved no-cue crossfade timing** — When exporting a playlist to Limina Mix, tracks without manual cue points now fade in so the fade completes exactly when the outgoing track begins its fade-out. The fade-in duration also includes a 3-second buffer beyond the detected content start for a more gradual build.
+
 ## v1.1.6
 
 - **Full-width transport bar** — The player bar now spans the entire window width, sitting below the folder panel and content area rather than only the right column.
