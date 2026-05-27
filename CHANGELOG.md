@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.9
+
+- **What's New modal** — Shows automatically on first launch after each update. Lists changes for the current version with previous versions collapsible below. Dismissing saves the version to localStorage — won't appear again until the next update. Skipped on brand-new installs (guided tour shows instead).
+
 ## v1.1.7
 
 - **Improved no-cue crossfade timing** — When exporting a playlist to Limina Mix, tracks without manual cue points now fade in so the fade completes exactly when the outgoing track begins its fade-out. The fade-in duration also includes a 3-second buffer beyond the detected content start for a more gradual build.
