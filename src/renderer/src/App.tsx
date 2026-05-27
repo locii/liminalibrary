@@ -13,6 +13,7 @@ import { GuidedTour } from './components/GuidedTour'
 import { PlayerBar } from './components/PlayerBar'
 import { SettingsPanel } from './components/SettingsPanel'
 import { ReindexDialog } from './components/ReindexDialog'
+import { WhatsNewModal } from './components/WhatsNewModal'
 import { loadSettings, saveSettings, applySettings } from './lib/settings'
 import type { AppSettings } from './lib/settings'
 import { syncLibraryToMfb } from './lib/syncLibrary'
@@ -287,6 +288,22 @@ export default function App(): JSX.Element {
   // Apply settings on mount and whenever they change
   useEffect(() => { applySettings(settings) }, [settings])
 
+  // Show What's New modal when the app version has changed since last launch.
+  // In dev mode always show it so the modal is easy to iterate on.
+  // On a brand-new install (tour not yet completed) silently record the version
+  // instead of showing the modal — it's not an update, it's a first launch.
+  useEffect(() => {
+    if (import.meta.env.DEV) { setWhatsNewOpen(true); return }
+    try {
+      const key = 'limina-library-last-seen-version'
+      if (!localStorage.getItem('tour-completed')) {
+        localStorage.setItem(key, __APP_VERSION__)
+      } else if (localStorage.getItem(key) !== __APP_VERSION__) {
+        setWhatsNewOpen(true)
+      }
+    } catch { /* noop */ }
+  }, [])
+
   function handleSettingsChange(s: AppSettings): void {
     setSettings(s)
     saveSettings(s)
@@ -300,6 +317,7 @@ export default function App(): JSX.Element {
   const [tourOpen, setTourOpen] = useState(() => {
     try { return !localStorage.getItem('tour-completed') } catch { return false }
   })
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false)
 
   useEffect(() => {
     if (!showUtilMenu) return
@@ -609,6 +627,14 @@ export default function App(): JSX.Element {
           }}
         />
       )}
+
+      <WhatsNewModal
+        open={whatsNewOpen}
+        onClose={() => {
+          try { localStorage.setItem('limina-library-last-seen-version', __APP_VERSION__) } catch { /* noop */ }
+          setWhatsNewOpen(false)
+        }}
+      />
     </div>
   )
 }
