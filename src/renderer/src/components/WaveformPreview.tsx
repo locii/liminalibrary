@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useLibraryStore } from '../store/libraryStore'
+import { audioStreamUrl } from '../lib/audioStreamUrl'
 
 interface Props {
   fileId: string
@@ -78,7 +79,7 @@ export function WaveformPreview({ fileId, filePath, duration, peaks, sampleRate,
   // Create audio element; replace when file changes
   useEffect(() => {
     if (port === null) return
-    const audio = new Audio(`http://127.0.0.1:${port}${encodeURI(filePath)}?sr=${sampleRate ?? 0}`)
+    const audio = new Audio(audioStreamUrl(port, filePath, sampleRate))
     audioRef.current = audio
     audio.addEventListener('ended', () => { setPlaying(false); setCurrentTime(0) })
     return () => {

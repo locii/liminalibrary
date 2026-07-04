@@ -10,6 +10,28 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.1.10',
+    date: 'July 2026',
+    sections: [
+      {
+        icon: '♪',
+        title: 'Windows audio playback fixed',
+        items: [
+          'Preview and Now Playing audio failed to load on Windows due to how the stream URL handled Windows file paths',
+          'Windows paths are now normalised correctly; macOS is unaffected',
+        ],
+      },
+      {
+        icon: '⏱',
+        title: '"Added" date column',
+        items: [
+          'New sortable Added column shows when each track was added — sort to find recently added music',
+          "Taken from the file's creation date, so it backfills across your library on the next rescan",
+        ],
+      },
+    ],
+  },
+  {
     version: '1.1.9',
     date: 'May 2026',
     sections: [

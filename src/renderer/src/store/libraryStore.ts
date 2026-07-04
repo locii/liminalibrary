@@ -12,6 +12,15 @@ function normalizeCurve(v: unknown): number {
   return 0  // 'linear' or missing
 }
 
+/** Earliest of two ISO date strings, ignoring empty/invalid ones. */
+function earliestIso(a: string | undefined, b: string | undefined): string {
+  const av = a && !Number.isNaN(Date.parse(a)) ? a : ''
+  const bv = b && !Number.isNaN(Date.parse(b)) ? b : ''
+  if (!av) return bv
+  if (!bv) return av
+  return Date.parse(av) <= Date.parse(bv) ? av : bv
+}
+
 function normalizeImportedFile(f: Catalogue['files'][number]): LibraryFile {
   return {
     ...f,
@@ -35,6 +44,7 @@ function normalizeImportedFile(f: Catalogue['files'][number]): LibraryFile {
     fadeOutCurve: normalizeCurve(f.fadeOutCurve),
     clipStartMs: f.clipStartMs ?? null,
     clipEndMs: f.clipEndMs ?? null,
+    dateAdded: f.dateAdded ?? '',
   }
 }
 
@@ -187,6 +197,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         artistPathGuess: f.artistPathGuess,
         albumPathGuess: f.albumPathGuess,
         appliedPathGuess: guessesUnchanged ? prev.appliedPathGuess : false,
+        // Backfill "date added" from the file's creation date on rescan.
+        // Keep the earliest known value so it doesn't jump around if the
+        // file is later copied/moved (which resets birthtime).
+        dateAdded: earliestIso(prev.dateAdded, f.dateAdded),
       })
     }
     return { files: [...existing.values()] }

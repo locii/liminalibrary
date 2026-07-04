@@ -21,7 +21,7 @@ import { mfbTrackUrl, phaseColorForTag } from '../types'
 import { useLibraryStore } from '../store/libraryStore'
 import { syncLibraryToMfb } from '../lib/syncLibrary'
 
-const COLUMN_STORAGE_KEY = 'library-file-list-column-widths-v6'
+const COLUMN_STORAGE_KEY = 'library-file-list-column-widths-v7'
 const GRIP_PX = 8
 const ROW_HEIGHT = 36
 const OVERSCAN = 5
@@ -53,6 +53,7 @@ type ColumnWidths = {
   hour: number
   format: number
   size: number
+  added: number
 }
 
 const COLUMN_DEFAULTS: ColumnWidths = {
@@ -71,6 +72,7 @@ const COLUMN_DEFAULTS: ColumnWidths = {
   duration: 68,
   format: 60,
   size: 64,
+  added: 72,
 }
 
 const COLUMN_MIN: ColumnWidths = {
@@ -89,6 +91,7 @@ const COLUMN_MIN: ColumnWidths = {
   duration: 42,
   format: 32,
   size: 46,
+  added: 52,
 }
 
 // Width needed for the hour cell to show all chips inline.
@@ -142,6 +145,7 @@ const GRIP_PAIRS: [keyof ColumnWidths, keyof ColumnWidths][] = [
   ['danceability', 'duration'],
   ['duration', 'format'],
   ['format', 'size'],
+  ['size', 'added'],
 ]
 
 function applyColumnGrip(gripIdx: number, base: ColumnWidths, dx: number): ColumnWidths {
@@ -158,7 +162,7 @@ function applyColumnGrip(gripIdx: number, base: ColumnWidths, dx: number): Colum
   return { ...base, [L]: nl, [R]: nr }
 }
 
-type SortKey = 'fileName' | 'artist' | 'album' | 'hour' | 'duration' | 'format' | 'fileSize' | 'intensity' | 'affective' | 'activation' | 'spaciousness' | 'tension' | 'energy' | 'valence' | 'danceability'
+type SortKey = 'fileName' | 'artist' | 'album' | 'hour' | 'duration' | 'format' | 'fileSize' | 'dateAdded' | 'intensity' | 'affective' | 'activation' | 'spaciousness' | 'tension' | 'energy' | 'valence' | 'danceability'
 type SortDir = 'asc' | 'desc'
 type SortEntry = { key: SortKey; dir: SortDir }
 
@@ -200,6 +204,12 @@ function sortFiles(files: LibraryFile[], sorts: SortEntry[]): LibraryFile[] {
         case 'duration': c = (a.duration - b.duration) * mul; break
         case 'format': c = a.format.localeCompare(b.format, undefined, { sensitivity: 'base' }) * mul; break
         case 'fileSize': c = (a.fileSize - b.fileSize) * mul; break
+        case 'dateAdded': {
+          const ta = Date.parse(a.dateAdded) || 0
+          const tb = Date.parse(b.dateAdded) || 0
+          c = (ta - tb) * mul
+          break
+        }
         default: {
           const va = afValue(a, key)
           const vb = afValue(b, key)
@@ -233,6 +243,29 @@ function formatSize(bytes: number): string {
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`
   if (bytes >= 1_000) return `${(bytes / 1_000).toFixed(0)} KB`
   return `${bytes} B`
+}
+
+// Compact "date added" for the column: relative for the last week, else a
+// short date. Full ISO date is exposed via the cell's title attribute.
+function formatDateAdded(iso: string): string {
+  const t = Date.parse(iso)
+  if (!t) return '—'
+  const now = Date.now()
+  const days = Math.floor((now - t) / 86_400_000)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 7) return `${days}d ago`
+  const d = new Date(t)
+  const sameYear = d.getFullYear() === new Date(now).getFullYear()
+  return d.toLocaleDateString(undefined, sameYear
+    ? { day: 'numeric', month: 'short' }
+    : { day: 'numeric', month: 'short', year: '2-digit' })
+}
+
+function formatDateAddedFull(iso: string): string {
+  const t = Date.parse(iso)
+  if (!t) return 'Date added unknown'
+  return `Added ${new Date(t).toLocaleString()}`
 }
 
 export function FileList(): JSX.Element {
@@ -464,14 +497,15 @@ export function FileList(): JSX.Element {
     duration: storedWidths.duration,
     format: storedWidths.format,
     size: storedWidths.size,
+    added: storedWidths.added,
   }
   visibleWidthsRef.current = cw
 
-  const minTableWidth = TABLE_HORIZONTAL_PADDING + 14 * GRIP_PX
+  const minTableWidth = TABLE_HORIZONTAL_PADDING + 15 * GRIP_PX
     + cw.name + cw.artist + cw.album + cw.hour
     + cw.intensity + cw.affective + cw.activation + cw.spaciousness
     + cw.tension + cw.energy + cw.valence + cw.danceability
-    + cw.duration + cw.format + cw.size
+    + cw.duration + cw.format + cw.size + cw.added
 
   const gripMouseDown = (gripIdx: number) => (e: React.MouseEvent): void => {
     e.preventDefault()
@@ -649,6 +683,8 @@ export function FileList(): JSX.Element {
           <SortHeader label="Format" {...headerProps('format')} className="shrink-0 text-left py-1.5" style={{ width: cw.format }} />
           <GripSpacer onGripMouseDown={gripMouseDown(13)} />
           <SortHeader label="Size" {...headerProps('fileSize')} className="shrink-0 text-left py-1.5" style={{ width: cw.size }} />
+          <GripSpacer onGripMouseDown={gripMouseDown(14)} />
+          <SortHeader label="Added" {...headerProps('dateAdded')} className="shrink-0 text-left py-1.5" style={{ width: cw.added }} />
         </div>
 
         {files.length === 0 ? (
@@ -866,6 +902,14 @@ export function FileList(): JSX.Element {
                   <span className="text-[11px] text-left shrink-0 tabular-nums text-gray-600" style={{ width: cw.size }}>
                     {formatSize(file.fileSize)}
                   </span>
+                  <GripSpacer />
+                  <span
+                    className="text-[11px] text-left shrink-0 tabular-nums text-gray-600"
+                    style={{ width: cw.added }}
+                    title={formatDateAddedFull(file.dateAdded)}
+                  >
+                    {formatDateAdded(file.dateAdded)}
+                  </span>
                 </div>
               ))}
             </div>
@@ -943,6 +987,8 @@ export function FileList(): JSX.Element {
                     </svg>
                   </button>
                 </div>
+                <GripSpacer />
+                <span className="shrink-0" style={{ width: cw.added }} />
               </div>
             ))}
           </>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useLibraryStore } from '../store/libraryStore'
 import { useUpdaterStore } from '../store/updaterStore'
+import { audioStreamUrl } from '../lib/audioStreamUrl'
 import { NowPlayingOverlay } from './NowPlayingOverlay'
 
 const WAVEFORM_COLORS: [string, string][] = [
@@ -80,7 +81,7 @@ export function PlayerBar(): JSX.Element | null {
     // the new audio while its play() promise is still pending.
     playingRef.current = false
     setPlaying(false)
-    const audio = new Audio(`http://127.0.0.1:${port}${encodeURI(file.filePath)}?sr=${file.sampleRate ?? 0}`)
+    const audio = new Audio(audioStreamUrl(port, file.filePath, file.sampleRate))
     audioRef.current = audio
     setCurrentTime(0)
     let cancelled = false

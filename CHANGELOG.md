@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.1.10
+
+- **Windows audio playback fixed** — Preview and Now Playing audio failed to load on Windows because the streaming URL was built assuming a Unix-style file path, so the drive letter fused onto the server port and backslashes corrupted the path. Windows paths are now normalised correctly. macOS is unaffected.
+- **"Added" date column** — The file list has a new sortable **Added** column showing when each track was added, so you can sort to find recently added music. The date is taken from the file's creation date, so it backfills across your whole library the next time you rescan.
+
 ## v1.1.9
 
 - **What's New modal** — Shows automatically on first launch after each update. Lists changes for the current version with previous versions collapsible below. Dismissing saves the version to localStorage — won't appear again until the next update. Skipped on brand-new installs (guided tour shows instead).

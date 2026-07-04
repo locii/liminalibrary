@@ -27,6 +27,17 @@ function fileId(filePath: string): string {
   return createHash('sha1').update(filePath).digest('hex').slice(0, 16)
 }
 
+/**
+ * "Date added" = the file's own creation date so it backfills deterministically
+ * on every scan. Uses birthtime, falling back to mtime on filesystems that
+ * don't record a birth time (where birthtime reads as 0 / epoch).
+ */
+function fileCreatedISO(stat: { birthtime: Date; mtime: Date }): string {
+  const born = stat.birthtime
+  if (born && born.getTime() > 0) return born.toISOString()
+  return stat.mtime.toISOString()
+}
+
 /** Watched-folder relative path …/Artist/Album/ → album = innermost folder, artist = above. Single segment → artist only. */
 function inferPathArtistAlbum(directoryPath: string, libraryRoot: string): { artistPathGuess: string; albumPathGuess: string } {
   const folder = normalize(directoryPath)
@@ -98,7 +109,7 @@ export function registerScanHandlers(): void {
             rating: 0,
             notes: '',
             breathworkPhase: null,
-            dateAdded: new Date().toISOString(),
+            dateAdded: fileCreatedISO(stat),
             peaks: [],
             trackTitle: '',
             mfbTrackId: null,

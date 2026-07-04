@@ -127,7 +127,10 @@ function startAudioServer(): void {
   const server = createServer(async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*')
     const url = new URL('http://x' + (req.url ?? ''))
-    const filePath = decodeURIComponent(url.pathname)
+    let filePath = decodeURIComponent(url.pathname)
+    // Windows drive paths arrive as "/C:/Users/…" — drop the leading slash so
+    // fs/ffmpeg get a valid "C:/Users/…". POSIX paths ("/Users/…") are untouched.
+    if (/^\/[A-Za-z]:\//.test(filePath)) filePath = filePath.slice(1)
     let stat
     try {
       stat = await fs.stat(filePath)
