@@ -62,7 +62,7 @@ function buildSidebarTags(files: { tags: readonly string[] }[]): [string, number
 }
 
 export function FolderPanel({ onAddFolder, onRescan }: Props): JSX.Element {
-  const [mode, setMode] = useState<PanelMode>('folders')
+  const [mode, setMode] = useState<PanelMode>('tags')
   const [isDragOver, setIsDragOver] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; folderId: string } | null>(null)
   const [tagQuery, setTagQuery] = useState('')
@@ -451,7 +451,11 @@ export function FolderPanel({ onAddFolder, onRescan }: Props): JSX.Element {
             })
           )
         ) : mode === 'sessions' ? (
-          mixSessions.length === 0 ? (
+          !userAccount ? (
+            <p className="px-3 py-4 text-[11px] text-gray-600 text-center leading-relaxed">
+              Build and play a mix for free.<br />Recording &amp; saving sessions<br />is a Pro feature.
+            </p>
+          ) : mixSessions.length === 0 ? (
             <p className="px-3 py-4 text-[11px] text-gray-600 text-center leading-relaxed">
               No sessions yet.<br />Create one to build a mix.
             </p>

@@ -5,13 +5,16 @@ import { MixCueEditorModal } from './MixCueEditorModal'
 import { SessionsModal } from './SessionsModal'
 import { SaveSessionModal } from './SaveSessionModal'
 import { GuidedTour } from './GuidedTour'
-import { SESSION_STEPS } from './sessionTourSteps'
+import { SESSION_STEPS, PRO_TOUR_STEP_IDS } from './sessionTourSteps'
 import { startRecording, stopRecording, cancelRecording } from '../lib/sessionRecorder'
 import { getMixEngine } from '../lib/mixEngineSingleton'
 import { feelScore, materializeGroup, getGenStart } from '../lib/mixSelection'
 import type { MixEngine } from '../lib/mixEngine'
 import type { LibraryFile } from '../types'
 import type { MixQueueItem } from '../store/libraryStore'
+
+// Where the Pro upsell (locked Session Mode features) sends free users.
+const PRO_UPSELL_URL = 'https://musicforbreathwork.com/pricing'
 
 export const MIX_TAG_DND_TYPE = 'application/x-limina-tag'
 export const MIX_TRACK_DND_TYPE = 'application/x-limina-mix-track'
@@ -70,6 +73,11 @@ export function MixPanel(): JSX.Element {
   const playlists = useLibraryStore((s) => s.playlists)
   const setPlaylists = useLibraryStore((s) => s.setPlaylists)
   const userAccount = useLibraryStore((s) => s.userAccount)
+
+  // Pro gate for Session Mode. Playing/building a mix is free; recording,
+  // templates, and loading saved sessions are Pro-only. Currently maps to being
+  // signed in — swap this for the course/subscription entitlement when it lands.
+  const isPro = userAccount !== null
 
   const featureTargetEntries = useMemo(() => Object.entries(mixFeatureTargets), [mixFeatureTargets])
 
@@ -232,7 +240,14 @@ export function MixPanel(): JSX.Element {
     setSavingName(null)
   }, [savingName, saveMix])
   // Guided tour for Session Mode — auto-shown on first entry, replayable via the ? button.
+  // Free users skip the Pro-only steps (record, load, templates, export).
+  const tourSteps = useMemo(
+    () => isPro ? SESSION_STEPS : SESSION_STEPS.filter((s) => !PRO_TOUR_STEP_IDS.has(s.id)),
+    [isPro]
+  )
   const [tourOpen, setTourOpen] = useState(false)
+  // Pro upsell prompt (shown when a free user taps a locked feature).
+  const [upsellOpen, setUpsellOpen] = useState(false)
   useEffect(() => {
     try {
       if (!localStorage.getItem('session-tour-completed')) setTourOpen(true)
@@ -472,7 +487,14 @@ export function MixPanel(): JSX.Element {
         <button type="button" onClick={() => setTourOpen(true)} title="Session Mode tour"
           className="flex items-center justify-center w-5 h-5 rounded-full border border-surface-border text-[10px] text-gray-500 hover:text-gray-200 hover:border-accent/50 transition-colors shrink-0">?</button>
         <div className="flex items-center gap-3 ml-auto">
-          {(savedMixes.length > 0 || mixSessions.length > 0) && (
+          {!isPro ? (
+            /* Free tier: locked Load — opens the Pro upsell instead of loading. */
+            <button type="button" onClick={() => setUpsellOpen(true)} title="Loading templates & sessions is a Pro feature"
+              className="flex items-center gap-1 bg-surface-panel border border-surface-border rounded px-2 py-0.5 text-[10px] text-gray-500 hover:text-accent hover:border-accent/50 transition-colors">
+              Load…
+              <svg className="w-3 h-3 text-accent shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 014 0v1.5" /></svg>
+            </button>
+          ) : (savedMixes.length > 0 || mixSessions.length > 0) ? (
             <span data-tour="session-load" className="flex items-center gap-1">
               <select value={loadSel} onChange={(e) => handleLoadSelection(e.target.value)}
                 className="bg-surface-panel border border-surface-border rounded px-2 py-0.5 text-[10px] text-gray-300 outline-none max-w-[160px]"
@@ -497,7 +519,8 @@ export function MixPanel(): JSX.Element {
                 </button>
               )}
             </span>
-          )}
+          ) : null}
+          {isPro && (<>
           {/* Ellipsis menu — export / recorded-session actions */}
           <div data-tour="session-export" className="relative" ref={exportMenuRef}>
             <button type="button" onClick={() => setExportMenuOpen((v) => !v)} title="Session options"
@@ -532,6 +555,7 @@ export function MixPanel(): JSX.Element {
               <button type="button" onClick={() => setSavingName('')} className="text-[10px] text-gray-400 hover:text-accent transition-colors" title="Save this queue as a session template">Save as Template</button>
             )}
           </span>
+          </>)}
         </div>
       </div>
 
@@ -640,7 +664,8 @@ export function MixPanel(): JSX.Element {
                   : <svg className="w-4 h-4" viewBox="0 0 10 10" fill="currentColor"><path d="M2 1.5l7 3.5-7 3.5V1.5z" /></svg>}
               </button>
 
-              {/* Record — captures the blow-by-blow of this session */}
+              {/* Record — captures the blow-by-blow of this session (Pro) */}
+              {isPro ? (
               <span data-tour="session-record" className="flex items-center shrink-0">
                 {recording ? (
                   <button type="button" onClick={() => setSavePromptOpen(true)} title="Stop recording & save this session"
@@ -656,6 +681,16 @@ export function MixPanel(): JSX.Element {
                   </button>
                 )}
               </span>
+              ) : (
+                /* Free tier: locked Record — clicking opens the Pro upsell. */
+                <button type="button" onClick={() => setUpsellOpen(true)} title="Recording is a Pro feature"
+                  className="relative flex items-center justify-center w-9 h-9 rounded-full border border-surface-border text-gray-600 hover:text-accent hover:border-accent/50 hover:bg-accent/10 transition-colors shrink-0">
+                  <span className="w-3 h-3 rounded-full bg-gray-600" />
+                  <svg className="absolute -top-1 -right-1 w-3.5 h-3.5 text-accent bg-surface-panel rounded-full p-px" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 014 0v1.5" />
+                  </svg>
+                </button>
+              )}
 
               <button type="button" disabled={!canPlay} onClick={() => eng()?.next()}
                 className="flex items-center justify-center text-gray-300 transition-colors border rounded-full w-9 h-9 border-surface-border hover:text-white hover:border-accent/50 hover:bg-accent/10 disabled:opacity-30"
@@ -806,8 +841,9 @@ export function MixPanel(): JSX.Element {
               </div>
             )}
 
-            {/* Playlist → queue */}
-            {userAccount && playlists.length > 0 && (
+            {/* Playlist → queue (Pro) */}
+            {isPro ? (
+              playlists.length > 0 && (
               <div className="flex items-center gap-2 mt-2">
                 <select value={playlistId} onChange={(e) => setPlaylistId(e.target.value === '' ? '' : Number(e.target.value))}
                   className="flex-1 min-w-0 bg-surface-panel border border-surface-border rounded px-2 py-1 text-[11px] text-gray-300 outline-none">
@@ -818,6 +854,17 @@ export function MixPanel(): JSX.Element {
                   className="text-[10px] px-2.5 py-1 rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors disabled:opacity-40 shrink-0">
                   {addingPlaylist ? 'Adding…' : 'Add to queue'}
                 </button>
+              </div>
+              )
+            ) : (
+              /* Free tier: locked "Add a playlist" — disabled look, opens the Pro upsell. */
+              <div className="flex items-center gap-2 mt-2">
+                <button type="button" onClick={() => setUpsellOpen(true)} title="Adding a playlist is a Pro feature"
+                  className="flex-1 min-w-0 flex items-center justify-between gap-2 bg-surface-panel border border-surface-border rounded px-2 py-1 text-[11px] text-gray-600 opacity-70 hover:opacity-100 hover:text-accent hover:border-accent/50 transition-colors">
+                  <span className="truncate">Add a playlist…</span>
+                  <svg className="w-3 h-3 text-accent shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 014 0v1.5" /></svg>
+                </button>
+                <span className="text-[10px] px-2.5 py-1 rounded border border-surface-border text-gray-700 shrink-0 cursor-default select-none">Add to queue</span>
               </div>
             )}
           </div>
@@ -865,7 +912,43 @@ export function MixPanel(): JSX.Element {
 
       {sessionsOpen && <SessionsModal initialSessionId={sessionsInitialId} onClose={() => setSessionsOpen(false)} />}
 
-      {tourOpen && <GuidedTour steps={SESSION_STEPS} onClose={closeTour} />}
+      {tourOpen && <GuidedTour steps={tourSteps} onClose={closeTour} />}
+
+      {upsellOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setUpsellOpen(false)} />
+          <div className="relative flex flex-col w-full max-w-sm gap-4 p-5 shadow-2xl bg-surface-panel rounded-xl border border-surface-border">
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-accent" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 014 0v1.5" />
+              </svg>
+              <h2 className="text-sm font-semibold text-white">Unlock Session Mode Pro</h2>
+            </div>
+            <p className="text-[11px] text-gray-500 leading-relaxed">
+              Playing and building a live mix is free. <span className="text-gray-300">Pro</span> adds the tools
+              to keep what you play:
+            </p>
+            <ul className="flex flex-col gap-1.5 text-[11px] text-gray-400">
+              {['Record the blow-by-blow of a live session', 'Save reusable templates', 'Load & replay past sessions'].map((t) => (
+                <li key={t} className="flex items-center gap-2">
+                  <svg className="w-3 h-3 text-accent shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 6.5l2.5 2.5 4.5-5.5" /></svg>
+                  {t}
+                </li>
+              ))}
+            </ul>
+            <div className="flex items-center justify-end gap-2">
+              <button type="button" onClick={() => setUpsellOpen(false)}
+                className="px-3 py-1.5 text-[11px] text-gray-400 rounded border border-surface-border hover:text-gray-200 hover:bg-surface-hover transition-colors">
+                Not now
+              </button>
+              <button type="button" onClick={() => window.open(PRO_UPSELL_URL, '_blank')}
+                className="px-3 py-1.5 text-[11px] font-medium text-white rounded bg-accent hover:bg-accent/80 transition-colors">
+                Learn about Pro
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session Mode — Limina Library v2.0.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=Hanken+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          serif: ['Spectral', 'Georgia', 'serif'],
+          sans: ['"Hanken Grotesk"', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+          mono: ['"Space Mono"', 'ui-monospace', 'Menlo', 'monospace'],
+        },
+        colors: {
+          bg: '#14121C',
+          ink: '#ECE7F2',
+          muted: '#958DA8',
+          faint: '#6A6480',
+          accent: '#E5547B',
+        },
+      },
+    },
+  };
+</script>
+<style>
+  html, body { margin: 0; }
+  body {
+    background: radial-gradient(120% 90% at 50% -10%, #221C33 0%, #14121C 55%) fixed, #14121C;
+    -webkit-font-smoothing: antialiased;
+  }
+  .panel { background: rgba(255,255,255,0.035); border-color: rgba(255,255,255,0.09); }
+  .prose-body { line-height: 1.65; }
+  .prose-body a { color: #E5547B; text-decoration: none; }
+  .prose-body a:hover { text-decoration: underline; }
+  h2 { scroll-margin-top: 24px; }
+</style>
+</head>
+<body class="font-sans text-ink min-h-screen">
+<div class="mx-auto max-w-3xl px-6 py-12 sm:py-16 prose-body">
+
+  <!-- Header -->
+  <header class="mb-14">
+    <p class="font-mono text-[11px] tracking-[0.28em] uppercase text-faint mb-3">Limina Library · Feature Writeup</p>
+    <h1 class="font-serif font-medium text-4xl sm:text-5xl leading-tight tracking-tight mb-4">
+      Session Mode
+      <span class="text-accent">v2.0.0</span>
+    </h1>
+    <p class="text-muted text-[15px] leading-relaxed max-w-2xl">
+      Session Mode turns Limina Library from a catalogue into a live mixing tool. It builds and plays a
+      continuous, auto-crossfading breathwork mix from your own library, and lets you record, replay, and
+      template what you play. This is the headline of the 2.0 release (the feature was previously prototyped
+      as “Generate” / Auto-Mix).
+    </p>
+    <p class="text-faint text-[13.5px] leading-relaxed max-w-2xl mt-3">
+      A plain-language tour of everything that shipped, grouped by area. It doubles as reference for release
+      notes, the website, and support.
+    </p>
+  </header>
+
+  <!-- Table of contents -->
+  <nav aria-label="Contents" class="panel border rounded-2xl p-6 mb-14">
+    <p class="font-mono text-[11px] tracking-[0.2em] uppercase text-faint mb-4">On this page</p>
+    <ol class="grid sm:grid-cols-2 gap-x-8 gap-y-2 text-[14px] list-none p-0 m-0">
+      <li><a href="#in-out">Getting in and out</a></li>
+      <li><a href="#playing">Playing a mix</a></li>
+      <li><a href="#choosing">Choosing what plays</a></li>
+      <li><a href="#queue">Up Next — the queue</a></li>
+      <li><a href="#crossfades">Cue-aware crossfades</a></li>
+      <li><a href="#recording">Recording sessions</a></li>
+      <li><a href="#templates">Templates vs. Sessions</a></li>
+      <li><a href="#around">Around the app</a></li>
+      <li><a href="#maintainers">Where things live</a></li>
+    </ol>
+  </nav>
+
+  <div class="space-y-14">
+
+    <!-- Getting in and out -->
+    <section id="in-out">
+      <h2 class="font-serif text-2xl font-medium text-accent mb-4">Getting in and out</h2>
+      <ul class="space-y-2.5 text-[15px] text-muted list-disc pl-5 marker:text-accent/60">
+        <li><strong class="text-ink font-medium">Enter:</strong> the left sidebar has a new <strong class="text-ink font-medium">Sessions</strong> tab. Its <strong class="text-ink font-medium">Create session</strong> button opens Session Mode. (Session Mode is a Music for Breathwork account feature.)</li>
+        <li><strong class="text-ink font-medium">Sidebar order:</strong> tabs are now <span class="font-mono text-[13px] text-ink">Tags · Playlists · Sessions · Folders</span>, and the panel is slightly wider to fit them.</li>
+        <li><strong class="text-ink font-medium">Leave:</strong> the <strong class="text-ink font-medium">Close</strong> button in the header returns to the library. Playback keeps going — see the mini-player below.</li>
+      </ul>
+    </section>
+
+    <!-- Playing a mix -->
+    <section id="playing">
+      <h2 class="font-serif text-2xl font-medium text-accent mb-4">Playing a mix</h2>
+      <p class="text-[15px] text-muted mb-4"><strong class="text-ink font-medium">Now Playing</strong> is the heart of the panel:</p>
+      <ul class="space-y-2.5 text-[15px] text-muted list-disc pl-5 marker:text-accent/60">
+        <li>Album art, track title and artist for the current track.</li>
+        <li>A <strong class="text-ink font-medium">live waveform</strong> with playback position and cue markers (intro-end, outro-start, fade-in point). Click the waveform to cue-and-crossfade to any point.</li>
+        <li><strong class="text-ink font-medium">Transport:</strong> Play/Pause, Skip to next, and <strong class="text-ink font-medium">Fade next</strong> (start the crossfade into the next track immediately).</li>
+        <li><strong class="text-ink font-medium">Crossfade length slider (Xfade):</strong> sets how long transitions take. You can move it <em>during</em> a crossfade and the in-progress fade re-times to match.</li>
+        <li>Optional inline <strong class="text-ink font-medium">visualizer</strong> with a fullscreen mode.</li>
+      </ul>
+      <p class="text-[14px] text-faint mt-4 border-l-2 border-accent/40 pl-4">The engine is persistent: it lives outside the panel, so playback survives closing Session Mode.</p>
+    </section>
+
+    <!-- Choosing what plays -->
+    <section id="choosing">
+      <h2 class="font-serif text-2xl font-medium text-accent mb-4">Choosing what plays</h2>
+      <p class="text-[15px] text-muted mb-4"><strong class="text-ink font-medium">The pool</strong> is the set of tracks Session Mode can pull from. You shape it two ways:</p>
+      <ul class="space-y-2.5 text-[15px] text-muted list-disc pl-5 marker:text-accent/60">
+        <li><strong class="text-ink font-medium">Tags</strong> — filter to tracks carrying particular tags, matching <strong class="text-ink font-medium">Any</strong> (union) or <strong class="text-ink font-medium">All</strong> (intersection). Drag tags in from the picker or the sidebar.</li>
+        <li><strong class="text-ink font-medium">Feel EQ</strong> — a 4-band soft filter that <em>steers</em> rather than hard-filters the selection: <strong class="text-ink font-medium">Affective Intensity</strong>, <strong class="text-ink font-medium">Activating Intensity</strong>, <strong class="text-ink font-medium">Tension</strong>, and <strong class="text-ink font-medium">Spaciousness</strong>. Boost or cut each band; the available list re-sorts live by how well each track fits, showing a per-track “feel match” score.</li>
+      </ul>
+      <p class="text-[14px] text-faint mt-4 border-l-2 border-accent/40 pl-4">The <strong class="text-muted font-medium">Available</strong> list on the right is searchable and lazy-loaded, so large libraries stay fast.</p>
+    </section>
+
+    <!-- Up Next -->
+    <section id="queue">
+      <h2 class="font-serif text-2xl font-medium text-accent mb-4">Up Next — the queue</h2>
+      <p class="text-[15px] text-muted mb-4">The queue decides ordering. It holds two kinds of item:</p>
+      <ul class="space-y-2.5 text-[15px] text-muted list-disc pl-5 marker:text-accent/60">
+        <li><strong class="text-ink font-medium">Tracks</strong> — specific files, added by double-click, drag, or the + button.</li>
+        <li><strong class="text-ink font-medium">Tag generators</strong> — a tag group (plus its Feel EQ snapshot) that keeps pulling matching tracks. Each generator can have an optional <strong class="text-ink font-medium">duration</strong> and its own <strong class="text-ink font-medium">Any/All</strong> match mode. A generator shows a “ghost preview” of the exact tracks it will play next, in order, so what you see is what you’ll hear. You can reorder, shuffle, or sort a generator’s upcoming list.</li>
+      </ul>
+      <p class="text-[15px] text-muted mt-4">When the queue empties, the <strong class="text-ink font-medium">tail</strong> takes over — the most recently used generator (or the whole pool) keeps the mix going indefinitely.</p>
+      <p class="text-[15px] text-muted mt-3">You can also add an owned <strong class="text-ink font-medium">Music for Breathwork playlist</strong> straight into the queue.</p>
+    </section>
+
+    <!-- Crossfades -->
+    <section id="crossfades">
+      <h2 class="font-serif text-2xl font-medium text-accent mb-4">Cue-aware crossfades</h2>
+      <p class="text-[15px] text-muted mb-4">Crossfades sound best when they land on musical moments rather than arbitrary times:</p>
+      <ul class="space-y-2.5 text-[15px] text-muted list-disc pl-5 marker:text-accent/60">
+        <li>A <strong class="text-ink font-medium">background cue scan</strong> walks the library one file at a time, running an ffmpeg energy-envelope analysis to detect each track’s intro-end and outro-start. It’s throttled to stay out of the way and only touches unscanned files.</li>
+        <li>You can force a re-scan of a folder from its right-click menu (“Scan track cue points”).</li>
+        <li>Per-track <strong class="text-ink font-medium">fade points and curves</strong> are editable in the cue editor, and manual cues are always preserved over detected ones.</li>
+      </ul>
+    </section>
+
+    <!-- Recording -->
+    <section id="recording">
+      <h2 class="font-serif text-2xl font-medium text-accent mb-4">Recording sessions</h2>
+      <p class="text-[15px] text-muted mb-4">A <strong class="text-ink font-medium">session</strong> is a recording of what actually happened during a mix — the “blow-by-blow”.</p>
+      <ul class="space-y-2.5 text-[15px] text-muted list-disc pl-5 marker:text-accent/60">
+        <li>Hit <strong class="text-ink font-medium">Record</strong> (next to Play/Pause) to start capturing. The button shows a live elapsed time and track count.</li>
+        <li>Recording captures the <strong class="text-ink font-medium">realized tracklist</strong> (what actually played, with start offsets and crossfade lengths) and the <strong class="text-ink font-medium">plan edits</strong> you made along the way (adding/removing generators, changing durations, etc.).</li>
+        <li>Clicking the record button again opens the <strong class="text-ink font-medium">Save Session</strong> modal — name it and save. Saving requires at least one track to have played, so you can’t accidentally save an empty recording.</li>
+        <li>On save, the session opens in the <strong class="text-ink font-medium">Recorded Sessions</strong> view so you can see exactly what was captured, and it appears in the <strong class="text-ink font-medium">Sessions</strong> tab.</li>
+      </ul>
+      <div class="mt-5 space-y-3">
+        <p class="text-[15px] text-muted"><strong class="text-ink font-medium">In the Sessions tab (sidebar):</strong> every recorded session is listed with its date, duration, and track count. Click one to <strong class="text-ink font-medium">load it and start playing</strong> immediately.</p>
+        <p class="text-[15px] text-muted"><strong class="text-ink font-medium">In the Recorded Sessions modal:</strong> a chronological timeline of tracks + edits + crossfades, with actions to <strong class="text-ink font-medium">Load &amp; play</strong>, <strong class="text-ink font-medium">Export tracklist</strong> (to clipboard), <strong class="text-ink font-medium">Save as Template</strong>, or <strong class="text-ink font-medium">Delete</strong>.</p>
+      </div>
+    </section>
+
+    <!-- Templates vs Sessions -->
+    <section id="templates">
+      <h2 class="font-serif text-2xl font-medium text-accent mb-4">Templates vs. Sessions</h2>
+      <p class="text-[15px] text-muted mb-5">Two distinct, complementary concepts — this distinction is worth keeping clear:</p>
+      <div class="panel border rounded-2xl overflow-hidden">
+        <table class="w-full text-left text-[14px] border-collapse">
+          <thead>
+            <tr class="border-b" style="border-color: rgba(255,255,255,0.09)">
+              <th class="p-4 font-mono text-[11px] tracking-[0.15em] uppercase text-faint font-normal"></th>
+              <th class="p-4 font-medium text-ink">Template</th>
+              <th class="p-4 font-medium text-ink">Recorded Session</th>
+            </tr>
+          </thead>
+          <tbody class="text-muted">
+            <tr class="border-b" style="border-color: rgba(255,255,255,0.05)">
+              <td class="p-4 text-faint font-medium align-top">What it is</td>
+              <td class="p-4 align-top">A reusable <em>plan</em> — tags, generators, tracks and settings</td>
+              <td class="p-4 align-top">A recording of an <em>actual playthrough</em></td>
+            </tr>
+            <tr class="border-b" style="border-color: rgba(255,255,255,0.05)">
+              <td class="p-4 text-faint font-medium align-top">Created by</td>
+              <td class="p-4 align-top"><strong class="text-ink font-medium">Save as Template</strong></td>
+              <td class="p-4 align-top"><strong class="text-ink font-medium">Record</strong> → save</td>
+            </tr>
+            <tr>
+              <td class="p-4 text-faint font-medium align-top">Loading it</td>
+              <td class="p-4 align-top">Sets up the queue to generate from</td>
+              <td class="p-4 align-top">Replays the exact tracklist you captured</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="text-[15px] text-muted mt-5">Both are reachable from the header <strong class="text-ink font-medium">Load…</strong> menu, grouped under <strong class="text-ink font-medium">Templates</strong> and <strong class="text-ink font-medium">Recorded Sessions</strong>. The trash button next to it deletes whichever is selected.</p>
+      <p class="text-[15px] text-muted mt-3">The <strong class="text-ink font-medium">⋯ menu</strong> near Load offers <strong class="text-ink font-medium">Export tracklist</strong> (copies the current plan to the clipboard) and a shortcut to the recorded-sessions list.</p>
+    </section>
+
+    <!-- Around the app -->
+    <section id="around">
+      <h2 class="font-serif text-2xl font-medium text-accent mb-4">Around the app</h2>
+      <ul class="space-y-2.5 text-[15px] text-muted list-disc pl-5 marker:text-accent/60">
+        <li><strong class="text-ink font-medium">Navbar mini-player</strong> — once a mix is playing, a compact strip in the top bar shows the current track with play/pause and skip, and jumps back into Session Mode on click. It stays after you leave the panel.</li>
+        <li><strong class="text-ink font-medium">Guided tour</strong> — a Session Mode walkthrough appears automatically the first time you open the panel, and can be replayed any time with the <strong class="text-ink font-medium">?</strong> button in the header.</li>
+      </ul>
+    </section>
+
+    <!-- Maintainers -->
+    <section id="maintainers">
+      <h2 class="font-serif text-2xl font-medium text-accent mb-4">Where things live <span class="text-faint text-base font-sans">(for maintainers)</span></h2>
+      <ul class="space-y-2 text-[14px] text-muted list-none p-0 m-0">
+        <li><code class="font-mono text-[12.5px] text-accent">components/MixPanel.tsx</code> — the Session Mode view.</li>
+        <li><code class="font-mono text-[12.5px] text-accent">components/SessionsModal.tsx</code> — recorded-sessions timeline + actions.</li>
+        <li><code class="font-mono text-[12.5px] text-accent">components/SaveSessionModal.tsx</code> — the name-and-save prompt.</li>
+        <li><code class="font-mono text-[12.5px] text-accent">components/MixMiniPlayer.tsx</code> — navbar strip.</li>
+        <li><code class="font-mono text-[12.5px] text-accent">components/MixVisualizer.tsx</code> — visualizer.</li>
+        <li><code class="font-mono text-[12.5px] text-accent">components/sessionTourSteps.ts</code> — guided-tour steps (rendered by the shared <code class="font-mono text-[12.5px] text-accent">GuidedTour</code>).</li>
+        <li><code class="font-mono text-[12.5px] text-accent">lib/mixEngine.ts</code> / <code class="font-mono text-[12.5px] text-accent">lib/mixEngineSingleton.ts</code> — persistent crossfading playback engine.</li>
+        <li><code class="font-mono text-[12.5px] text-accent">lib/mixSelection.ts</code> — pool/queue materialisation and feel scoring.</li>
+        <li><code class="font-mono text-[12.5px] text-accent">lib/sessionRecorder.ts</code> — session recording (tracklist + edit diffing).</li>
+        <li><code class="font-mono text-[12.5px] text-accent">lib/cueScan.ts</code> — background intro/outro cue analysis.</li>
+        <li>Store: <code class="font-mono text-[12.5px] text-accent">store/libraryStore.ts</code> — <code class="font-mono text-[12.5px] text-accent">mixQueue</code>, <code class="font-mono text-[12.5px] text-accent">savedMixes</code> (templates), <code class="font-mono text-[12.5px] text-accent">mixSessions</code> (recordings), <code class="font-mono text-[12.5px] text-accent">mixPlayback</code>, and related actions.</li>
+      </ul>
+    </section>
+
+  </div>
+
+  <footer class="mt-20 pt-8 border-t text-faint text-[12px] font-mono tracking-wide" style="border-color: rgba(255,255,255,0.09)">
+    Limina Library — Session Mode · v2.0.0
+  </footer>
+
+</div>
+</body>
+</html>

@@ -72,3 +72,12 @@ export const SESSION_STEPS: TourStep[] = [
     placement: 'center',
   },
 ]
+
+/** Steps covering Pro-only affordances (recording, templates, loading saved
+ *  sessions, export). Filtered out of the tour for free users. */
+export const PRO_TOUR_STEP_IDS = new Set([
+  'session-record',
+  'session-load',
+  'session-save-template',
+  'session-export',
+])

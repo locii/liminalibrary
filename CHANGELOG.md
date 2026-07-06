@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.1.0 — Free Session Mode
+
+Session Mode is now free to play. Anyone can build and play a live, auto-crossfading mix from their library — tags, Feel EQ, the Up Next queue and generators, transport, and the crossfade slider all work without an account. The pro tools that keep what you play are reserved for **Music for Breathwork Pro**.
+
+- **Play for free** — Building and playing a mix no longer requires an account.
+- **Pro-only capture tools** — Recording sessions, saving templates, loading saved templates/sessions, and adding a playlist to the queue are now Pro features. Free users see these as locked controls that open a short prompt linking to [musicforbreathwork.com/pricing](https://musicforbreathwork.com/pricing).
+- **Tags open by default** — The sidebar now opens on the **Tags** pane instead of Folders.
+
 ## v2.0.0 — Session Mode
 
 A major update that turns Limina Library into a live mixing tool. **Session Mode** (formerly "Generate") builds and plays a continuous, crossfading breathwork mix from your library in real time — and lets you record, replay, and template your sessions.
