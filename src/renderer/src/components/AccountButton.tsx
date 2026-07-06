@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLibraryStore } from '../store/libraryStore'
 
-export function AccountButton(): JSX.Element {
+export function AccountButton({ menuItems, pendingCount = 0, onApplyPending }: {
+  menuItems?: React.ReactNode
+  pendingCount?: number
+  onApplyPending?: () => void
+} = {}): JSX.Element {
   const userAccount = useLibraryStore((s) => s.userAccount)
   const setUserAccount = useLibraryStore((s) => s.setUserAccount)
   const setLoginFlash = useLibraryStore((s) => s.setLoginFlash)
@@ -63,19 +67,45 @@ export function AccountButton(): JSX.Element {
         <button
           type="button"
           onClick={() => setShowMenu((v) => !v)}
-          className="flex items-center gap-1.5 h-6 px-2.5 text-[11px] text-gray-400 hover:text-gray-200 bg-surface-hover border border-surface-border rounded transition-colors"
+          className="relative flex items-center gap-1.5 h-6 px-2.5 text-[11px] text-gray-400 hover:text-gray-200 bg-surface-hover border border-surface-border rounded transition-colors"
         >
           <span className="w-4 h-4 rounded-full bg-accent/30 text-accent text-[9px] font-semibold flex items-center justify-center shrink-0">
             {userAccount.name.charAt(0).toUpperCase()}
           </span>
           <span className="max-w-[100px] truncate">{userAccount.name}</span>
+          {pendingCount > 0 && (
+            <span
+              className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-accent text-white text-[8px] font-semibold leading-none flex items-center justify-center ring-2 ring-surface-panel"
+              title={`${pendingCount} pending ${pendingCount === 1 ? 'match' : 'matches'} to apply`}
+            >
+              {pendingCount}
+            </span>
+          )}
         </button>
         {showMenu && (
-          <div className="absolute right-0 top-8 z-50 min-w-[160px] rounded border border-surface-border bg-surface-panel shadow-lg py-1 text-[11px]">
+          <div className="absolute right-0 top-8 z-50 min-w-[170px] rounded border border-surface-border bg-surface-panel shadow-lg py-1 text-[11px]">
             <div className="px-3 py-2 border-b border-surface-border">
               <p className="font-medium text-gray-300 truncate">{userAccount.name}</p>
               <p className="text-gray-600 truncate">{userAccount.email}</p>
             </div>
+            {pendingCount > 0 && onApplyPending && (
+              <button
+                type="button"
+                onClick={() => { setShowMenu(false); onApplyPending() }}
+                className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-accent hover:bg-surface-hover transition-colors"
+              >
+                <svg className="w-3 h-3 shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1.5 5l2.5 2.5L8.5 2" />
+                </svg>
+                Apply {pendingCount} pending {pendingCount === 1 ? 'match' : 'matches'}
+              </button>
+            )}
+            {menuItems && (
+              <div onClick={() => setShowMenu(false)} className="border-t border-surface-border">
+                {menuItems}
+              </div>
+            )}
+            <div className="border-t border-surface-border" />
             <button
               type="button"
               onClick={() => window.open('https://musicforbreathwork.com/dashboard', '_blank')}

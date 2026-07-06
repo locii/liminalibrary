@@ -2,13 +2,23 @@ import { useEffect, useRef, useState } from 'react'
 import { useLibraryStore } from '../store/libraryStore'
 import { phaseColorForTag } from '../types'
 import { syncLibraryToMfb } from '../lib/syncLibrary'
+import { runCueScan } from '../lib/cueScan'
+import { getMixEngine } from '../lib/mixEngineSingleton'
+import type { MixSession } from '../store/libraryStore'
 
 interface Props {
   onAddFolder: (folderPath?: string) => void
   onRescan: () => void
 }
 
-type PanelMode = 'folders' | 'tags' | 'playlists'
+type PanelMode = 'tags' | 'playlists' | 'sessions' | 'folders'
+
+/** Compact "42m" / "1h 5m" duration label for the session list. */
+function fmtSessionDuration(ms: number): string {
+  const totalMin = Math.round(ms / 60000)
+  if (totalMin < 60) return `${totalMin}m`
+  return `${Math.floor(totalMin / 60)}h ${totalMin % 60}m`
+}
 
 /** Story-structure hour tags shown in sidebar order; counts come from library files */
 const PRESET_HOUR_TAGS = [
@@ -101,6 +111,20 @@ export function FolderPanel({ onAddFolder, onRescan }: Props): JSX.Element {
   const selectPlaylist = useLibraryStore((s) => s.selectPlaylist)
   const playlistTrackQuery = useLibraryStore((s) => s.playlistTrackQuery)
   const setPlaylistTrackQuery = useLibraryStore((s) => s.setPlaylistTrackQuery)
+  const cueScan = useLibraryStore((s) => s.cueScan)
+  const mixSessions = useLibraryStore((s) => s.mixSessions)
+  const enterMixMode = useLibraryStore((s) => s.enterMixMode)
+  const loadSession = useLibraryStore((s) => s.loadSession)
+
+  // Clicking a session: load its tracklist, switch to playback (mix) mode, and
+  // start playing. This click is a valid audio gesture so play() can begin.
+  function openSession(session: MixSession): void {
+    loadSession(session.id)
+    enterMixMode()
+    const e = getMixEngine()
+    e.xfadeMs = session.skeleton.mixFadeMs
+    e.play()
+  }
 
   const totalFiles = files.length
   const matchedFiles = files.filter((f) => f.mfbTrackId !== null).length
@@ -130,6 +154,14 @@ export function FolderPanel({ onAddFolder, onRescan }: Props): JSX.Element {
     } else if (next === 'tags') {
       selectFolder(null)
       setFolderQuery('')
+      setPlaylistSearch('')
+      setPlaylistTrackQuery('')
+      selectPlaylist(null)
+    } else if (next === 'sessions') {
+      selectFolder(null)
+      setFolderQuery('')
+      clearSelectedTags()
+      setTagQuery('')
       setPlaylistSearch('')
       setPlaylistTrackQuery('')
       selectPlaylist(null)
@@ -209,7 +241,7 @@ export function FolderPanel({ onAddFolder, onRescan }: Props): JSX.Element {
   return (
     <div
       data-tour="folder-panel"
-      className={`relative flex flex-col w-60 shrink-0 border-r border-surface-border bg-surface-panel transition-colors ${isDragOver ? 'bg-accent/10' : ''}`}
+      className={`relative flex flex-col w-96 shrink-0 border-r border-surface-border bg-surface-panel transition-colors ${isDragOver ? 'bg-accent/10' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -221,7 +253,7 @@ export function FolderPanel({ onAddFolder, onRescan }: Props): JSX.Element {
       )}
 
       {isDragOver && (
-        <div className="flex absolute inset-0 z-10 flex-col gap-2 justify-center items-center rounded border-2 border-dashed pointer-events-none border-accent/60">
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded pointer-events-none border-accent/60">
           <svg className="w-6 h-6 text-accent/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 7a2 2 0 012-2h3l2 2h9a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
           </svg>
@@ -230,7 +262,7 @@ export function FolderPanel({ onAddFolder, onRescan }: Props): JSX.Element {
       )}
       {/* Mode toggle */}
       <div className="flex border-b border-surface-border shrink-0">
-        {(['folders', 'tags', 'playlists'] as PanelMode[]).map((m) => (
+        {(['tags', 'playlists', 'sessions', 'folders'] as PanelMode[]).map((m) => (
           <button
             key={m}
             data-tour={m === 'playlists' ? 'playlists-tab' : undefined}
@@ -345,7 +377,7 @@ export function FolderPanel({ onAddFolder, onRescan }: Props): JSX.Element {
         )}
 
         {/* List */}
-        <div className="overflow-y-auto flex-1 min-h-0">
+        <div className="flex-1 min-h-0 overflow-y-auto">
         {mode === 'folders' ? (
           filteredFolders.length === 0 && folderQuery ? (
             <p className="px-3 py-3 text-[10px] text-gray-500">No matching folders</p>
@@ -367,7 +399,7 @@ export function FolderPanel({ onAddFolder, onRescan }: Props): JSX.Element {
                     : 'text-gray-400 hover:bg-surface-hover hover:text-gray-200'
                 }`}
               >
-                <div className="flex gap-2 items-center min-w-0">
+                <div className="flex items-center min-w-0 gap-2">
                   <svg className="w-3 h-3 text-gray-600 shrink-0" viewBox="0 0 12 12" fill="currentColor">
                     <path d="M1 3.5A1.5 1.5 0 012.5 2h2l1.5 1.5H9.5A1.5 1.5 0 0111 5v4A1.5 1.5 0 019.5 10.5h-7A1.5 1.5 0 011 9V3.5z" />
                   </svg>
@@ -389,6 +421,12 @@ export function FolderPanel({ onAddFolder, onRescan }: Props): JSX.Element {
                 key={tag}
                 type="button"
                 aria-pressed={isOn}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('application/x-limina-tag', tag)
+                  e.dataTransfer.setData('text/plain', tag)
+                  e.dataTransfer.effectAllowed = 'copy'
+                }}
                 onClick={() => toggleSelectedTag(tag)}
                 className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors ${
                   isOn
@@ -396,7 +434,7 @@ export function FolderPanel({ onAddFolder, onRescan }: Props): JSX.Element {
                     : 'text-gray-400 hover:bg-surface-hover hover:text-gray-200'
                 }`}
               >
-                <div className="flex gap-2 items-center min-w-0">
+                <div className="flex items-center min-w-0 gap-2">
                   <svg
                     className="w-3 h-3 shrink-0"
                     viewBox="0 0 12 12"
@@ -412,6 +450,30 @@ export function FolderPanel({ onAddFolder, onRescan }: Props): JSX.Element {
               )
             })
           )
+        ) : mode === 'sessions' ? (
+          mixSessions.length === 0 ? (
+            <p className="px-3 py-4 text-[11px] text-gray-600 text-center leading-relaxed">
+              No sessions yet.<br />Create one to build a mix.
+            </p>
+          ) : mixSessions.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => openSession(s)}
+              title="Load this session and play"
+              className="flex flex-col items-start w-full px-3 py-2 text-left text-gray-400 transition-colors border-b hover:bg-surface-hover hover:text-gray-200 border-surface-border/40"
+            >
+              <div className="flex items-center w-full min-w-0 gap-2">
+                <svg className="w-3 h-3 text-accent shrink-0" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M2 3h2.5a4 4 0 013.2 1.6L9 6.5l1.3 1.9A4 4 0 0013.5 10M2 10h2.5a4 4 0 002.8-1.2M13.5 4h-1.5a4 4 0 00-3.2 1.6" />
+                </svg>
+                <span className="text-[11px] truncate">{s.name}</span>
+              </div>
+              <span className="text-[10px] text-gray-600 mt-0.5 pl-5">
+                {new Date(s.startedAt).toLocaleDateString()} · {fmtSessionDuration(s.durationMs)} · {s.played.length} tracks
+              </span>
+            </button>
+          ))
         ) : !userAccount ? (
           <p className="px-3 py-4 text-[11px] text-gray-600 text-center leading-relaxed">
             Sign in to view your<br /> Music for Breathwork playlists
@@ -507,7 +569,7 @@ export function FolderPanel({ onAddFolder, onRescan }: Props): JSX.Element {
                     : 'text-gray-400 hover:bg-surface-hover hover:text-gray-200'
                 }`}
               >
-                <div className="flex gap-2 items-center min-w-0">
+                <div className="flex items-center min-w-0 gap-2">
                   {playlist.image_url ? (
                     <img src={playlist.image_url} alt="" className="object-cover w-4 h-4 rounded shrink-0" />
                   ) : (
@@ -530,6 +592,19 @@ export function FolderPanel({ onAddFolder, onRescan }: Props): JSX.Element {
 
       {/* Footer */}
       <div className="flex flex-col gap-1 p-2 border-t border-surface-border shrink-0">
+        {mode === 'sessions' && (
+          <button
+            type="button"
+            onClick={() => enterMixMode()}
+            className="w-full flex items-center justify-center gap-1.5 h-7 text-[11px] font-medium rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+            title="Create a new session — build a crossfading mix from tags"
+          >
+            <svg className="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <path d="M6 2v8M2 6h8" />
+            </svg>
+            Create session
+          </button>
+        )}
         {mode === 'tags' && selectedTags.length > 0 && (
           <button
             type="button"
@@ -656,6 +731,14 @@ export function FolderPanel({ onAddFolder, onRescan }: Props): JSX.Element {
               onClick={() => { window.electronAPI.showInFolder(folder.path); setContextMenu(null) }}
             >
               Show in Finder
+            </button>
+            <button
+              type="button"
+              disabled={cueScan.running}
+              className="w-full px-3 py-1.5 text-left text-gray-300 hover:bg-surface-hover transition-colors disabled:opacity-50"
+              onClick={() => { runCueScan({ force: true }); setContextMenu(null) }}
+            >
+              {cueScan.running ? `Scanning cue points… ${cueScan.done}/${cueScan.total}` : 'Scan track cue points'}
             </button>
             <div className="my-0.5 border-t border-surface-border" />
             <button

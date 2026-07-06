@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.0.0 — Session Mode
+
+A major update that turns Limina Library into a live mixing tool. **Session Mode** (formerly "Generate") builds and plays a continuous, crossfading breathwork mix from your library in real time — and lets you record, replay, and template your sessions.
+
+- **Session Mode** — Open it from the new **Sessions** tab → **Create session**. A dedicated view that plays a seamless, auto-crossfading mix. Now Playing shows album art, a live waveform with cue markers, transport controls, and a crossfade-length slider you can move mid-fade (in-progress crossfades re-time to match).
+- **Tag pool & Feel EQ** — Filter the available tracks by tag (match **Any** or **All**), then shape the selection with a 4-band **Feel EQ** — Affective Intensity, Activating Intensity, Tension, and Spaciousness. The pool re-sorts live by how well each track fits.
+- **Up Next queue & generators** — Queue specific tracks, or drop in **tag generators** that keep pulling matching tracks for a set duration. Reorder items, preview what's coming next, and let the last generator carry the "tail" once the queue empties. You can also add an owned Music for Breathwork playlist straight to the queue.
+- **Cue-aware crossfades** — A background scan analyses each track's energy envelope to find intro/outro points, so crossfades land on musical moments. Per-track fade points and curves are editable, and you can re-scan a folder on demand.
+- **Record sessions** — Hit **Record** to capture the blow-by-blow of a session — the exact tracklist and the changes you make as you go. Saving opens the session so you can see everything that was captured; it then lives in the **Sessions** tab to replay or export.
+- **Templates & replay** — **Save as Template** stores the current queue and settings as a reusable starting point. The **Load…** menu loads either a Template (a reusable plan) or a Recorded Session (replays the exact tracklist). Export any session's tracklist to your clipboard from the ⋯ menu.
+- **Navbar mini-player** — Playback started in Session Mode stays visible and controllable from a compact strip in the top bar after you leave the panel.
+- **Guided tour** — A walkthrough of Session Mode appears the first time you open it, and can be replayed any time with the **?** button.
+- **Reorganised sidebar** — The left panel tabs are now **Tags · Playlists · Sessions · Folders**, and the panel is a little wider.
+
 ## v1.1.10
 
 - **Windows audio playback fixed** — Preview and Now Playing audio failed to load on Windows because the streaming URL was built assuming a Unix-style file path, so the drive letter fused onto the server port and backslashes corrupted the path. Windows paths are now normalised correctly. macOS is unaffected.

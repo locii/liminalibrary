@@ -142,6 +142,10 @@ function startAudioServer(): void {
     // WAV is a special case: only 16-bit PCM int is reliable — float/24-bit get
     // misdecoded at the device output rate, so route those through ffmpeg→FLAC.
     const sr = parseInt(url.searchParams.get('sr') ?? '0') || 0
+    // Optional start offset (seconds). Forces the transcode path so ffmpeg can
+    // seek with -ss and stream from the offset — the element plays from 0, so
+    // there's no (pop-prone) client-side seek. Used by Auto-Mix fade-in points.
+    const startSec = parseFloat(url.searchParams.get('ss') ?? '0') || 0
     const ext = (filePath.split('.').pop() ?? '').toLowerCase()
     const browserNative = new Set(['mp3', 'm4a', 'mp4', 'aac', 'ogg', 'oga', 'opus', 'webm', 'flac'])
     const needsResample = sr > 48000
@@ -150,7 +154,7 @@ function startAudioServer(): void {
       const fmt = await inspectWavFormat(filePath)
       wavSafe = !!(fmt && fmt.formatCode === 1 && fmt.bitsPerSample === 16)
     }
-    const needsTranscode = needsResample || !(browserNative.has(ext) || (ext === 'wav' && wavSafe))
+    const needsTranscode = needsResample || startSec > 0 || !(browserNative.has(ext) || (ext === 'wav' && wavSafe))
 
     if (!needsTranscode) {
       const total = stat.size
@@ -182,6 +186,8 @@ function startAudioServer(): void {
     // WAV-header placeholder size that subtly skews Chromium playback speed.
     // Resample to 48kHz only when the source exceeds it (Chromium misdecodes >48kHz).
     const ffArgs = [
+      // -ss before -i = fast input seek; the stream then starts at the offset.
+      ...(startSec > 0 ? ['-ss', String(startSec)] : []),
       '-i', filePath,
       '-vn', '-ac', '2',
       ...(needsResample ? ['-ar', '48000'] : []),

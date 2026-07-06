@@ -10,6 +10,65 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2.0.0',
+    date: 'July 2026',
+    sections: [
+      {
+        icon: '⚡',
+        title: 'Session Mode',
+        items: [
+          'A new live mixing view (formerly "Generate") — open it from the Sessions tab → Create session',
+          'Plays a seamless, auto-crossfading mix from your library with album art, a live waveform, and transport controls',
+          'Move the crossfade-length slider mid-fade and the in-progress crossfade re-times to match',
+        ],
+      },
+      {
+        icon: '✧',
+        title: 'Shape the sound',
+        items: [
+          'Filter the track pool by tag (match Any or All)',
+          'A 4-band Feel EQ steers the selection by Affective Intensity, Activating Intensity, Tension, and Spaciousness',
+          'The pool re-sorts live by how well each track fits',
+        ],
+      },
+      {
+        icon: '≡',
+        title: 'Up Next & generators',
+        items: [
+          'Queue specific tracks, or drop in tag generators that keep pulling matching tracks for a set duration',
+          'Reorder items, preview what\'s coming next, and let the last generator carry the "tail" when the queue empties',
+          'Add an owned Music for Breathwork playlist straight to the queue',
+        ],
+      },
+      {
+        icon: '●',
+        title: 'Record, replay & templates',
+        items: [
+          'Record captures the blow-by-blow of a session — the exact tracklist and the changes you make',
+          'Saved sessions live in the Sessions tab to replay or export; export any tracklist from the ⋯ menu',
+          'Save as Template stores a reusable plan; the Load menu loads either a Template or a Recorded Session',
+        ],
+      },
+      {
+        icon: '⇌',
+        title: 'Cue-aware crossfades',
+        items: [
+          'A background scan finds each track\'s intro/outro points so crossfades land on musical moments',
+          'Per-track fade points and curves are editable, and folders can be re-scanned on demand',
+        ],
+      },
+      {
+        icon: '✦',
+        title: 'Around the app',
+        items: [
+          'A navbar mini-player keeps Session Mode playback visible after you leave the panel',
+          'A guided tour appears the first time you open Session Mode — replay it with the ? button',
+          'Sidebar tabs reorganised to Tags · Playlists · Sessions · Folders',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.1.10',
     date: 'July 2026',
     sections: [

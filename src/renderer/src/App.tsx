@@ -9,14 +9,17 @@ import { AccountButton } from './components/AccountButton'
 import { MissingTrackPanel } from './components/MissingTrackPanel'
 import { PlaylistPanel } from './components/PlaylistPanel'
 import { PlaylistTrackSearch } from './components/PlaylistTrackSearch'
+import { MixPanel } from './components/MixPanel'
 import { GuidedTour } from './components/GuidedTour'
 import { PlayerBar } from './components/PlayerBar'
+import { MixMiniPlayer } from './components/MixMiniPlayer'
 import { SettingsPanel } from './components/SettingsPanel'
 import { ReindexDialog } from './components/ReindexDialog'
 import { WhatsNewModal } from './components/WhatsNewModal'
 import { loadSettings, saveSettings, applySettings } from './lib/settings'
 import type { AppSettings } from './lib/settings'
 import { syncLibraryToMfb } from './lib/syncLibrary'
+import { runCueScan } from './lib/cueScan'
 import { useUpdaterStore } from './store/updaterStore'
 
 
@@ -36,6 +39,7 @@ export default function App(): JSX.Element {
   const selectedMissingTrackId = useLibraryStore((s) => s.selectedMissingTrackId)
   const selectedPlaylistId = useLibraryStore((s) => s.selectedPlaylistId)
   const playlistTrackQuery = useLibraryStore((s) => s.playlistTrackQuery)
+  const mixMode = useLibraryStore((s) => s.mixMode)
   const loadCatalogue = useLibraryStore((s) => s.loadCatalogue)
   const addWatchedFolder = useLibraryStore((s) => s.addWatchedFolder)
   const addFiles = useLibraryStore((s) => s.addFiles)
@@ -142,6 +146,8 @@ export default function App(): JSX.Element {
       if (state.files.length > prev.files.length) {
         const hasNew = state.files.some((f) => !f.mfbIndexed)
         if (hasNew && !cancelledRef.current && state.userAccount) { setIndexing(true); scheduleNextRef.current?.(5000) }
+        // Auto-Mix cue analysis runs regardless of auth (local ffmpeg only).
+        if (state.files.some((f) => !f.cuesAnalyzed)) runCueScan()
       }
     })
   }, [])
@@ -216,6 +222,13 @@ export default function App(): JSX.Element {
       setCatalogueLoaded(true)
     })
   }, [loadCatalogue])
+
+  // Kick off the Auto-Mix cue scan once the library is loaded (low priority).
+  useEffect(() => {
+    if (!catalogueLoaded) return
+    const t = setTimeout(() => { runCueScan() }, 4000)
+    return () => clearTimeout(t)
+  }, [catalogueLoaded])
 
   // Persist catalogue whenever state changes — debounced so rapid updates don't race
   useEffect(() => {
@@ -348,6 +361,67 @@ export default function App(): JSX.Element {
     }
   }
 
+  // Folder-action menu items, shared by the profile dropdown (signed in) and a
+  // standalone dropdown (signed out). Buttons don't self-close — the containing
+  // menu closes on click (onClick bubbles up to its wrapper).
+  const folderActionItems = (
+    <>
+      <button
+        data-tour="add-folder"
+        type="button"
+        onClick={() => handleAddFolder()}
+        disabled={scanning}
+        className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-gray-300 hover:bg-surface-hover hover:text-gray-100 disabled:opacity-40 transition-colors"
+      >
+        <svg className="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <path d="M6 2v8M2 6h8" />
+        </svg>
+        Add Folder
+      </button>
+      {hasContent && (
+        <button
+          type="button"
+          onClick={() => handleRescan()}
+          disabled={scanning}
+          className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-gray-300 hover:bg-surface-hover hover:text-gray-100 disabled:opacity-40 transition-colors"
+        >
+          <svg className="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10.5 6A4.5 4.5 0 1 1 6 1.5" />
+            <path d="M6 1.5l2.5-1M6 1.5l1 2.5" />
+          </svg>
+          Rescan Folders
+        </button>
+      )}
+      {hasContent && (
+        <button
+          data-tour="re-index"
+          type="button"
+          onClick={() => setShowReindexDialog(true)}
+          className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-gray-300 hover:bg-surface-hover hover:text-gray-100 transition-colors"
+        >
+          <svg className="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="6" cy="6" r="2" />
+            <path d="M6 1v1.5M6 9.5V11M1 6h1.5M9.5 6H11" />
+            <path d="M2.6 2.6l1.1 1.1M8.3 8.3l1.1 1.1M9.4 2.6L8.3 3.7M3.7 8.3L2.6 9.4" />
+          </svg>
+          Re-index
+        </button>
+      )}
+      <div className="my-1 border-t border-surface-border" />
+      <button
+        type="button"
+        onClick={() => openBackups()}
+        className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-gray-300 hover:bg-surface-hover hover:text-gray-100 transition-colors"
+      >
+        <svg className="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M1.5 6a4.5 4.5 0 1 0 1.3-3" />
+          <path d="M1.5 3V6H4.5" />
+        </svg>
+        Restore Backup
+      </button>
+    </>
+  )
+
   return (
     <div className="flex flex-col h-full text-gray-200 bg-surface-base">
       {/* macOS traffic-light drag region */}
@@ -389,119 +463,58 @@ export default function App(): JSX.Element {
           Limina Library
         </button>
         <div className="flex gap-2 items-center">
-          {(indexing || pendingCount > 0) && (
+          <MixMiniPlayer />
+          {indexing && (
             <div className="flex items-center gap-1.5">
-              {indexing && (
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setShowLog(true)}
-                    className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
-                    title="View indexing log"
-                  >
-                    <svg className="w-2.5 h-2.5 animate-spin text-gray-600" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <path d="M6 1v2M6 9v2M1 6h2M9 6h2" strokeLinecap="round" />
-                      <path d="M2.5 2.5l1.4 1.4M8.1 8.1l1.4 1.4M9.5 2.5L8.1 3.9M3.9 8.1L2.5 9.5" strokeLinecap="round" opacity="0.4" />
-                    </svg>
-                    <span className="text-[10px] text-gray-600">Indexing</span>
-                  </button>
-                  <span className="text-[10px] text-gray-700">·</span>
-                  <button
-                    type="button"
-                    onClick={cancelIndexing}
-                    className="text-[10px] text-gray-600 hover:text-gray-300 transition-colors"
-                  >
-                    Cancel
-                  </button>
+              <button
+                type="button"
+                onClick={() => setShowLog(true)}
+                className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+                title="View indexing log"
+              >
+                <svg className="w-2.5 h-2.5 animate-spin text-gray-600" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M6 1v2M6 9v2M1 6h2M9 6h2" strokeLinecap="round" />
+                  <path d="M2.5 2.5l1.4 1.4M8.1 8.1l1.4 1.4M9.5 2.5L8.1 3.9M3.9 8.1L2.5 9.5" strokeLinecap="round" opacity="0.4" />
+                </svg>
+                <span className="text-[10px] text-gray-600">Indexing</span>
+              </button>
+              <span className="text-[10px] text-gray-700">·</span>
+              <button
+                type="button"
+                onClick={cancelIndexing}
+                className="text-[10px] text-gray-600 hover:text-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          {/* Folder-actions dropdown — only when signed out; when signed in these
+              items live in the profile dropdown (AccountButton). */}
+          {!userAccount && (
+            <div className="relative" ref={utilMenuRef}>
+              <button
+                type="button"
+                onClick={() => setShowUtilMenu((v) => !v)}
+                title="Actions"
+                className="flex justify-center items-center px-4 h-6 text-gray-300 rounded border transition-colors bg-surface-hover hover:bg-surface-border border-surface-border text-[10px]"
+              >
+                Folder Actions
+                <svg className="w-2.5 h-2.5 ml-1" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <path d="M2 3.5l3 3 3-3" />
+                </svg>
+              </button>
+              {showUtilMenu && (
+                <div onClick={() => setShowUtilMenu(false)} className="absolute right-0 top-8 z-50 min-w-[160px] rounded border border-surface-border bg-surface-panel shadow-lg py-1 text-[11px]">
+                  {folderActionItems}
                 </div>
-              )}
-              {pendingCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => { applyAllPendingMatches(); syncLibraryToMfb() }}
-                  className="flex items-center gap-1 h-6 px-2.5 text-[10px] font-medium rounded border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
-                  title="Apply all pending Music for Breathwork matches"
-                >
-                  <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1.5 5l2.5 2.5L8.5 2" />
-                  </svg>
-                  Apply {pendingCount} pending {pendingCount === 1 ? 'match' : 'matches'}
-                </button>
               )}
             </div>
           )}
-          {/* Utility dropdown */}
-          <div className="relative" ref={utilMenuRef}>
-            <button
-              type="button"
-              onClick={() => setShowUtilMenu((v) => !v)}
-              title="Actions"
-              className="flex justify-center items-center px-4 h-6 text-gray-300 rounded border transition-colors bg-surface-hover hover:bg-surface-border border-surface-border text-[10px]"
-            >
-              Folder Actions
-              <svg className="w-2.5 h-2.5 ml-1" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                <path d="M2 3.5l3 3 3-3" />
-              </svg>
-            </button>
-            {showUtilMenu && (
-              <div className="absolute right-0 top-8 z-50 min-w-[160px] rounded border border-surface-border bg-surface-panel shadow-lg py-1 text-[11px]">
-                <button
-                  data-tour="add-folder"
-                  type="button"
-                  onClick={() => { setShowUtilMenu(false); handleAddFolder() }}
-                  disabled={scanning}
-                  className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-gray-300 hover:bg-surface-hover hover:text-gray-100 disabled:opacity-40 transition-colors"
-                >
-                  <svg className="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                    <path d="M6 2v8M2 6h8" />
-                  </svg>
-                  Add Folder
-                </button>
-                {hasContent && (
-                  <button
-                    type="button"
-                    onClick={() => { setShowUtilMenu(false); handleRescan() }}
-                    disabled={scanning}
-                    className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-gray-300 hover:bg-surface-hover hover:text-gray-100 disabled:opacity-40 transition-colors"
-                  >
-                    <svg className="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M10.5 6A4.5 4.5 0 1 1 6 1.5" />
-                      <path d="M6 1.5l2.5-1M6 1.5l1 2.5" />
-                    </svg>
-                    Rescan Folders
-                  </button>
-                )}
-                {hasContent && (
-                  <button
-                    data-tour="re-index"
-                    type="button"
-                    onClick={() => { setShowUtilMenu(false); setShowReindexDialog(true) }}
-                    className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-gray-300 hover:bg-surface-hover hover:text-gray-100 transition-colors"
-                  >
-                    <svg className="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="6" cy="6" r="2" />
-                      <path d="M6 1v1.5M6 9.5V11M1 6h1.5M9.5 6H11" />
-                      <path d="M2.6 2.6l1.1 1.1M8.3 8.3l1.1 1.1M9.4 2.6L8.3 3.7M3.7 8.3L2.6 9.4" />
-                    </svg>
-                    Re-index
-                  </button>
-                )}
-                <div className="my-1 border-t border-surface-border" />
-                <button
-                  type="button"
-                  onClick={() => { setShowUtilMenu(false); openBackups() }}
-                  className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-gray-300 hover:bg-surface-hover hover:text-gray-100 transition-colors"
-                >
-                  <svg className="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1.5 6a4.5 4.5 0 1 0 1.3-3" />
-                    <path d="M1.5 3V6H4.5" />
-                  </svg>
-                  Restore Backup
-                </button>
-              </div>
-            )}
-          </div>
-          <AccountButton />
+          <AccountButton
+            menuItems={folderActionItems}
+            pendingCount={pendingCount}
+            onApplyPending={() => { applyAllPendingMatches(); syncLibraryToMfb() }}
+          />
           <button
             type="button"
             onClick={() => setShowSettings(true)}
@@ -591,10 +604,10 @@ export default function App(): JSX.Element {
       {!catalogueLoaded ? null : hasContent && !showWelcome ? (
         <div className="flex flex-col flex-1 min-h-0">
           <div className="flex flex-1 min-h-0">
-            <FolderPanel onAddFolder={handleAddFolder} onRescan={handleRescan} />
+            {!mixMode && <FolderPanel onAddFolder={handleAddFolder} onRescan={handleRescan} />}
             <div className="flex flex-1 min-h-0 min-w-0">
-              {playlistTrackQuery ? <PlaylistTrackSearch /> : selectedPlaylistId !== null ? <PlaylistPanel /> : <FileList />}
-              {(selectedFileId || selectedMissingTrackId) && (
+              {mixMode ? <MixPanel /> : playlistTrackQuery ? <PlaylistTrackSearch /> : selectedPlaylistId !== null ? <PlaylistPanel /> : <FileList />}
+              {!mixMode && (selectedFileId || selectedMissingTrackId) && (
                 <div className="w-96 border-l shrink-0 border-surface-border">
                   {selectedFileId ? <PropertiesPanel /> : <MissingTrackPanel key={selectedMissingTrackId} />}
                 </div>

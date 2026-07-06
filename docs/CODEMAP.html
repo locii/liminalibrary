@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Limina Library — Code Map</title>
+  <style>
+    :root {
+      --bg: #0f0f0f;
+      --surface: #1a1a1a;
+      --border: #2a2a2a;
+      --text: #e8e8e8;
+      --muted: #888;
+      --accent: #6366f1;
+      --accent-dim: rgba(99, 102, 241, 0.15);
+      --code: #c4b5fd;
+      --warn: #f59e0b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      font-size: 14px;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, .mono {
+      font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      background: var(--surface);
+      padding: 0.1em 0.35em;
+      border-radius: 4px;
+      color: var(--code);
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      min-height: 100vh;
+    }
+    nav {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      padding: 1.25rem 0.75rem;
+      background: #121212;
+    }
+    nav h2 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin: 1rem 0 0.5rem 0.75rem;
+    }
+    nav h2:first-child { margin-top: 0; }
+    nav a {
+      display: block;
+      padding: 0.35rem 0.75rem;
+      color: var(--muted);
+      border-radius: 6px;
+      font-size: 13px;
+    }
+    nav a:hover { background: var(--surface); color: var(--text); text-decoration: none; }
+    main { padding: 2rem 2.5rem 4rem; max-width: 960px; }
+    h1 { font-size: 1.75rem; font-weight: 600; margin: 0 0 0.25rem; }
+    .subtitle { color: var(--muted); margin-bottom: 1.5rem; }
+    #search {
+      width: 100%;
+      max-width: 420px;
+      padding: 0.6rem 0.9rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 14px;
+      margin-bottom: 2rem;
+    }
+    #search:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    section { margin-bottom: 2.5rem; scroll-margin-top: 1rem; }
+    section h2 {
+      font-size: 1.25rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    section h3 { font-size: 1rem; color: var(--muted); margin: 1.25rem 0 0.5rem; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-bottom: 1rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.5rem 0.65rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    .tag {
+      display: inline-block;
+      font-size: 10px;
+      padding: 0.15em 0.45em;
+      border-radius: 4px;
+      background: var(--accent-dim);
+      color: var(--accent);
+      margin-right: 0.25rem;
+    }
+    .tag.warn { background: rgba(245, 158, 11, 0.15); color: var(--warn); }
+    .diagram {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      font-family: monospace;
+      font-size: 12px;
+      white-space: pre;
+      overflow-x: auto;
+      color: var(--muted);
+    }
+    .callout {
+      border-left: 3px solid var(--warn);
+      background: rgba(245, 158, 11, 0.08);
+      padding: 0.75rem 1rem;
+      border-radius: 0 6px 6px 0;
+      margin: 1rem 0;
+      font-size: 13px;
+    }
+    .hidden { display: none !important; }
+    ul.compact { margin: 0.25rem 0; padding-left: 1.25rem; }
+    ul.compact li { margin: 0.15rem 0; }
+    .pair { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav>
+      <h2>Overview</h2>
+      <a href="#intro">Introduction</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#layout">UI layout</a>
+      <h2>Bridge</h2>
+      <a href="#ipc">IPC / electronAPI</a>
+      <a href="#audio">Audio server</a>
+      <h2>Main</h2>
+      <a href="#main-modules">Handler modules</a>
+      <h2>Renderer</h2>
+      <a href="#stores">Zustand stores</a>
+      <a href="#components">Components</a>
+      <a href="#lib">Lib helpers</a>
+      <h2>Data</h2>
+      <a href="#types">Shared types</a>
+      <a href="#external">External APIs</a>
+      <h2>Meta</h2>
+      <a href="#commands">Dev commands</a>
+    </nav>
+
+    <main>
+      <h1>Limina Library — Code Map</h1>
+      <p class="subtitle">Reference for IPC, modules, stores, and data flow. Machine-readable twin: <code>CODEMAP.yaml</code></p>
+
+      <input type="search" id="search" placeholder="Filter tables (channel, file, function…)…" autocomplete="off" />
+
+      <section id="intro">
+        <h2>Introduction</h2>
+        <p>Electron + React desktop app for breathwork facilitators: scan local audio, match against <strong>Music for Breathwork (MFB)</strong>, integrate with <strong>Limina Studio</strong> (<code>.limina</code> sessions).</p>
+        <p><span class="pair">Rule:</span> Renderer never calls Node — only <code>window.electronAPI</code> from <code>src/preload/index.ts</code>.</p>
+      </section>
+
+      <section id="architecture">
+        <h2>Architecture</h2>
+        <div class="diagram">┌─────────────────────────────────────────────────────────┐
+│  Renderer (React + Zustand)                             │
+│  src/renderer/src/                                      │
+└───────────────────────────┬─────────────────────────────┘
+                            │ window.electronAPI
+┌───────────────────────────▼─────────────────────────────┐
+│  Preload (contextBridge)  src/preload/index.ts          │
+└───────────────────────────┬─────────────────────────────┘
+                            │ ipcRenderer invoke/send
+┌───────────────────────────▼─────────────────────────────┐
+│  Main (Node/Electron)  src/main/                        │
+│  • index.ts — window, audio HTTP server, updater        │
+│  • ipc/*Handlers.ts — domain IPC                        │
+└─────────────────────────────────────────────────────────┘</div>
+        <h3>Persistence</h3>
+        <ul class="compact">
+          <li><code>{userData}/catalogue.json</code> — library JSON (peaks stripped on save)</li>
+          <li><code>{userData}/catalogue.{1-5}.json</code> — rotating backups</li>
+          <li><code>{userData}/auth.bin</code> — encrypted MFB bearer token</li>
+          <li><code>localStorage</code> <code>limina-settings-v1</code> — zoom + accent</li>
+        </ul>
+      </section>
+
+      <section id="layout">
+        <h2>UI layout</h2>
+        <table data-searchable>
+          <thead><tr><th>Region</th><th>Component</th><th>When visible</th></tr></thead>
+          <tbody>
+            <tr><td>Left</td><td><code>FolderPanel</code></td><td>Always — folders, tags, playlists</td></tr>
+            <tr><td>Center</td><td><code>FileList</code></td><td>No playlist selected</td></tr>
+            <tr><td>Center</td><td><code>PlaylistPanel</code></td><td><code>selectedPlaylistId</code> set</td></tr>
+            <tr><td>Right</td><td><code>PropertiesPanel</code></td><td>File selected</td></tr>
+            <tr><td>Right</td><td><code>MissingTrackPanel</code></td><td>Missing playlist track selected</td></tr>
+            <tr><td>Bottom</td><td><code>PlayerBar</code></td><td>Preview/playback active</td></tr>
+          </tbody>
+        </table>
+        <p><code>App.tsx</code> orchestrates catalogue load/save, MFB batch indexing (50 tracks / 1.5s), and overlays (settings, tour, reindex, mix editor).</p>
+      </section>
+
+      <section id="ipc">
+        <h2>IPC / electronAPI</h2>
+        <p>Preload method → IPC channel → handler. Types in <code>src/preload/index.d.ts</code>.</p>
+
+        <h3>Library &amp; shell</h3>
+        <table data-searchable>
+          <thead><tr><th>electronAPI</th><th>Channel</th><th>Handler</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td><code>pickFolder</code></td><td><code>library:pickFolder</code></td><td>scanHandlers</td><td>Folder picker dialog</td></tr>
+            <tr><td><code>buildWatchedFolder</code></td><td><code>library:buildWatchedFolder</code></td><td>scanHandlers</td><td>WatchedFolder metadata</td></tr>
+            <tr><td><code>scanFolder</code></td><td><code>library:scanFolder</code></td><td>scanHandlers</td><td>Recursive walk + music-metadata</td></tr>
+            <tr><td><code>scanFile</code></td><td><code>library:scanFile</code></td><td>scanHandlers</td><td>Single file → LibraryFile</td></tr>
+            <tr><td><code>findOnDisk</code></td><td><code>library:findOnDisk</code></td><td>scanHandlers</td><td>Spotlight / PowerShell search</td></tr>
+            <tr><td><code>pickAudioFile</code></td><td><code>library:pickAudioFile</code></td><td>scanHandlers</td><td>Audio file picker</td></tr>
+            <tr><td><code>copyFile</code></td><td><code>library:copyFile</code></td><td>index.ts</td><td>Clipboard: file path</td></tr>
+            <tr><td><code>startDrag</code></td><td><code>library:startDrag</code></td><td>index.ts</td><td><span class="tag">sync</span> Native drag</td></tr>
+            <tr><td><code>showInFolder</code></td><td><code>shell:showInFolder</code></td><td>index.ts</td><td>Reveal in Finder/Explorer</td></tr>
+            <tr><td><code>setWindowTitle</code></td><td><code>window:setTitle</code></td><td>index.ts</td><td><span class="tag">send</span></td></tr>
+            <tr><td><code>setZoom</code></td><td><code>window:setZoom</code></td><td>index.ts</td><td><span class="tag">send</span></td></tr>
+          </tbody>
+        </table>
+
+        <h3>Catalogue</h3>
+        <table data-searchable>
+          <thead><tr><th>electronAPI</th><th>Channel</th><th>Handler</th></tr></thead>
+          <tbody>
+            <tr><td><code>loadCatalogue</code></td><td><code>catalogue:load</code></td><td>catalogueHandlers — auto-restore from backup if empty</td></tr>
+            <tr><td><code>saveCatalogue</code></td><td><code>catalogue:save</code></td><td>catalogueHandlers — atomic tmp write</td></tr>
+            <tr><td><code>listCatalogueBackups</code></td><td><code>catalogue:listBackups</code></td><td>catalogueHandlers</td></tr>
+            <tr><td><code>restoreCatalogueBackup</code></td><td><code>catalogue:restoreBackup</code></td><td>catalogueHandlers</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Audio</h3>
+        <table data-searchable>
+          <thead><tr><th>electronAPI</th><th>Channel</th><th>Handler</th></tr></thead>
+          <tbody>
+            <tr><td><code>getWaveformPeaks</code></td><td><code>audio:getWaveformPeaks</code></td><td>audioHandlers — ffmpeg → peaks (default 800)</td></tr>
+            <tr><td><code>getFileDuration</code></td><td><code>audio:getFileDuration</code></td><td>audioHandlers — pipe byte count @ 8kHz</td></tr>
+            <tr><td><code>getAudioServerPort</code></td><td><code>audio:getServerPort</code></td><td>index.ts</td></tr>
+          </tbody>
+        </table>
+
+        <h3>MFB matching</h3>
+        <table data-searchable>
+          <thead><tr><th>electronAPI</th><th>Channel</th><th>Handler</th></tr></thead>
+          <tbody>
+            <tr><td><code>mfbSearchTracks</code></td><td><code>mfb:searchTracks</code></td><td>mfbHandlers — filter cached catalogue</td></tr>
+            <tr><td><code>mfbGetTrack</code></td><td><code>mfb:getTrack</code></td><td>mfbHandlers — GET /tracks/:id</td></tr>
+            <tr><td><code>mfbMatchTracks</code></td><td><code>mfb:matchTracks</code></td><td>mfbHandlers — fuzzy batch, threshold 0.25</td></tr>
+            <tr><td><code>mfbRankMatches</code></td><td><code>mfb:rankMatches</code></td><td>mfbHandlers — top 8 for manual pick</td></tr>
+            <tr><td><code>mfbClearCatalogue</code></td><td><code>mfb:clearCatalogue</code></td><td>mfbHandlers — bust cache</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Auth &amp; playlists</h3>
+        <table data-searchable>
+          <thead><tr><th>electronAPI</th><th>Channel</th><th>Handler</th></tr></thead>
+          <tbody>
+            <tr><td><code>authLogin</code></td><td><code>auth:login</code></td><td>authHandlers</td></tr>
+            <tr><td><code>authLogout</code></td><td><code>auth:logout</code></td><td>authHandlers</td></tr>
+            <tr><td><code>authMe</code></td><td><code>auth:me</code></td><td>authHandlers</td></tr>
+            <tr><td><code>getUserPlaylists</code></td><td><code>auth:getUserPlaylists</code></td><td>authHandlers</td></tr>
+            <tr><td><code>getPlaylist</code></td><td><code>auth:getPlaylist</code></td><td>authHandlers — segments + tracks</td></tr>
+            <tr><td><code>syncLibrary</code></td><td><code>auth:syncLibrary</code></td><td>authHandlers — POST /library/sync</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Limina Studio &amp; updater</h3>
+        <table data-searchable>
+          <thead><tr><th>electronAPI</th><th>Channel</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td><code>studioSaveSession</code></td><td><code>studio:saveSession</code></td><td>Save dialog → .limina JSON</td></tr>
+            <tr><td><code>studioOpenFile</code></td><td><code>studio:openFile</code></td><td>shell.openPath</td></tr>
+            <tr><td><code>checkForUpdates</code></td><td><code>updater:check</code></td><td>electron-updater</td></tr>
+            <tr><td><code>quitAndInstall</code></td><td><code>updater:quitAndInstall</code></td><td></td></tr>
+            <tr><td><code>onUpdateDownloading</code></td><td><code>updater:downloading</code></td><td>M→R event</td></tr>
+            <tr><td><code>onUpdateDownloaded</code></td><td><code>updater:downloaded</code></td><td>M→R event</td></tr>
+            <tr><td><code>simulateUpdate</code></td><td><code>updater:simulate</code></td><td><span class="tag warn">dev only</span></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="audio">
+        <h2>Audio server</h2>
+        <p><code>startAudioServer()</code> in <code>src/main/index.ts</code> — local HTTP on random <code>127.0.0.1</code> port for Chromium playback.</p>
+        <div class="callout">
+          <strong>Do not break these constraints</strong> (confirmed Chromium/ffmpeg bugs):<br>
+          1. Resample to 48kHz when source <code>sr &gt; 48000</code> (2× speed bug).<br>
+          2. Never transcode via WAV pipe — always <code>ffmpeg → FLAC</code>.<br>
+          3. Direct-stream WAV only if 16-bit PCM int; else transcode.
+        </div>
+        <p>Playback URL: <code>http://127.0.0.1:{port}/{encodeURIComponent(path)}?sr={sampleRate}</code></p>
+        <p>Direct formats: mp3, m4a, mp4, aac, ogg, oga, opus, webm, flac, and safe 16-bit WAV.</p>
+      </section>
+
+      <section id="main-modules">
+        <h2>Main process modules</h2>
+        <table data-searchable>
+          <thead><tr><th>File</th><th>Register</th><th>Key internals</th></tr></thead>
+          <tbody>
+            <tr><td><code>index.ts</code></td><td>—</td><td>Window, audio server, updater, drag icon, shell IPC</td></tr>
+            <tr><td><code>ipc/scanHandlers.ts</code></td><td><code>registerScanHandlers</code></td><td>walkDir, fileId (SHA1), inferPathArtistAlbum, music-metadata</td></tr>
+            <tr><td><code>ipc/catalogueHandlers.ts</code></td><td><code>registerCatalogueHandlers</code></td><td>rotateBackups (5 slots), atomic save</td></tr>
+            <tr><td><code>ipc/audioHandlers.ts</code></td><td><code>registerAudioHandlers</code></td><td>extractPeaks, duration via ffmpeg pipe</td></tr>
+            <tr><td><code>ipc/mfbHandlers.ts</code></td><td><code>registerMfbHandlers</code></td><td>scoreMatch, jaccard, catalogue cache 1h</td></tr>
+            <tr><td><code>ipc/authHandlers.ts</code></td><td><code>registerAuthHandlers</code></td><td>loadToken, apiPost/apiGet, safeStorage</td></tr>
+            <tr><td><code>ipc/studioHandlers.ts</code></td><td><code>registerStudioHandlers</code></td><td>Save/open .limina</td></tr>
+          </tbody>
+        </table>
+        <h3>MFB match scoring (mfbHandlers)</h3>
+        <ul class="compact">
+          <li><code>scoreMatch(entry, track)</code> — title/artist/album token overlap + folder hints</li>
+          <li>Auto-apply threshold: <code>0.25</code></li>
+          <li><code>mfb:rankMatches</code> returns top 8 with score &gt; 0.05</li>
+        </ul>
+      </section>
+
+      <section id="stores">
+        <h2>Zustand stores</h2>
+        <h3><code>useLibraryStore</code> — <code>src/renderer/src/store/libraryStore.ts</code></h3>
+        <table data-searchable>
+          <thead><tr><th>Category</th><th>Actions</th></tr></thead>
+          <tbody>
+            <tr><td>Catalogue</td><td><code>loadCatalogue</code>, <code>toCatalogue</code>, <code>addWatchedFolder</code>, <code>removeWatchedFolder</code></td></tr>
+            <tr><td>Files</td><td><code>addFiles</code>, <code>updateFile</code>, <code>removeFile</code>, <code>removeFiles</code>, <code>restoreFile</code></td></tr>
+            <tr><td>Selection</td><td><code>selectFile</code>, <code>selectFolder</code>, <code>selectTag</code>, <code>toggleSelectedTag</code>, <code>clearSelectedTags</code></td></tr>
+            <tr><td>MFB</td><td><code>setPendingMatch</code>, <code>applyPendingMatch</code>, <code>clearPendingMatch</code>, <code>applyAllPendingMatches</code>, <code>unlinkMfb</code>, <code>resetUnmatchedIndexing</code>, <code>resetAllIndexing</code></td></tr>
+            <tr><td>Playlists</td><td><code>setPlaylists</code>, <code>selectPlaylist</code>, <code>setPlaylistDetail</code>, <code>selectMissingTrack</code>, <code>setPlaylistSession</code></td></tr>
+            <tr><td>Auth UI</td><td><code>setUserAccount</code>, <code>setShowLoginModal</code>, <code>setLoginFlash</code></td></tr>
+            <tr><td>Preview</td><td><code>setPreview</code> — <code>previewFileId</code>, <code>previewQueue</code></td></tr>
+          </tbody>
+        </table>
+        <h3><code>useUpdaterStore</code></h3>
+        <p><code>setDownloading(percent)</code>, <code>setReady(version)</code> — wired from <code>App.tsx</code> updater events.</p>
+      </section>
+
+      <section id="components">
+        <h2>Components</h2>
+        <table data-searchable>
+          <thead><tr><th>Component</th><th>File</th><th>Role</th></tr></thead>
+          <tbody>
+            <tr><td>App</td><td>App.tsx</td><td>Root: persistence, indexing loop, layout</td></tr>
+            <tr><td>FolderPanel</td><td>FolderPanel.tsx</td><td>Sidebar: folders, hour tags, playlists</td></tr>
+            <tr><td>FileList</td><td>FileList.tsx</td><td>Virtualized table, multi-sort, filters</td></tr>
+            <tr><td>PropertiesPanel</td><td>PropertiesPanel.tsx</td><td>Track metadata, tags, buy links, mix cues</td></tr>
+            <tr><td>PlaylistPanel</td><td>PlaylistPanel.tsx</td><td>Playlist view, Studio session export</td></tr>
+            <tr><td>MissingTrackPanel</td><td>MissingTrackPanel.tsx</td><td>Link missing playlist tracks to library</td></tr>
+            <tr><td>PlayerBar</td><td>PlayerBar.tsx</td><td>HTML audio via local server</td></tr>
+            <tr><td>WaveformPreview</td><td>WaveformPreview.tsx</td><td>Waveform canvas + cue handles</td></tr>
+            <tr><td>MixCueEditorModal</td><td>MixCueEditorModal.tsx</td><td>Clip/intro/outro/fade editor</td></tr>
+            <tr><td>TrackLookup</td><td>TrackLookup.tsx</td><td>Manual MFB search + ranked picks</td></tr>
+            <tr><td>AccountButton</td><td>AccountButton.tsx</td><td>Login, logout, playlist refresh</td></tr>
+            <tr><td>IndexingLog</td><td>IndexingLog.tsx</td><td>Match log overlay</td></tr>
+            <tr><td>SettingsPanel</td><td>SettingsPanel.tsx</td><td>Zoom + accent presets</td></tr>
+            <tr><td>ReindexDialog</td><td>ReindexDialog.tsx</td><td>Reset MFB indexing options</td></tr>
+            <tr><td>GuidedTour</td><td>GuidedTour.tsx</td><td>Onboarding spotlight</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="lib">
+        <h2>Renderer lib helpers</h2>
+        <table data-searchable>
+          <thead><tr><th>Module</th><th>Exports</th></tr></thead>
+          <tbody>
+            <tr><td><code>lib/libraryTrackDisplay.ts</code></td><td><code>displayedArtist</code>, <code>displayedAlbum</code>, path-guess italic helpers, <code>pathGuessUpdatesForApply</code></td></tr>
+            <tr><td><code>lib/syncLibrary.ts</code></td><td><code>syncLibraryToMfb</code> — pushes applied <code>mfbTrackId</code>s to server</td></tr>
+            <tr><td><code>lib/settings.ts</code></td><td><code>loadSettings</code>, <code>saveSettings</code>, <code>applySettings</code>, presets</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="types">
+        <h2>Shared types</h2>
+        <p><code>src/shared/types.ts</code> — re-exported in renderer via <code>src/renderer/src/types/index.ts</code></p>
+        <table data-searchable>
+          <thead><tr><th>Type</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><code>LibraryFile</code></td><td>One audio file + MFB metadata + mix cues + peaks</td></tr>
+            <tr><td><code>WatchedFolder</code></td><td>Scanned root folder</td></tr>
+            <tr><td><code>Catalogue</code></td><td>Persisted JSON: folders, files, removedFiles, playlistSessions</td></tr>
+            <tr><td><code>MfbMatch</code></td><td>Full MFB track payload for apply</td></tr>
+            <tr><td><code>MfbPlaylistDetail</code></td><td>Segmented playlist from API</td></tr>
+            <tr><td><code>BreathworkPhase</code></td><td>Journey arc from MFB Hour tags</td></tr>
+          </tbody>
+        </table>
+        <p>Helpers: <code>mfbTrackUrl</code>, <code>appleMusicDeepLink</code>, <code>phaseColorForTag</code>, <code>PHASE_COLORS</code></p>
+      </section>
+
+      <section id="external">
+        <h2>External APIs</h2>
+        <p>Base: <code>https://musicforbreathwork.com/api</code> (HTTPS from main process only)</p>
+        <ul class="compact">
+          <li><code>GET /tracks</code> — catalogue cache (auth expands catalogue)</li>
+          <li><code>GET /tracks/:id</code></li>
+          <li><code>POST /auth/login</code>, <code>POST /auth/logout</code>, <code>GET /auth/me</code></li>
+          <li><code>GET /user/playlists</code>, <code>GET /playlist/:id</code></li>
+          <li><code>POST /library/sync</code> — <code>{ track_ids: number[] }</code></li>
+        </ul>
+      </section>
+
+      <section id="commands">
+        <h2>Dev commands</h2>
+        <table data-searchable>
+          <thead><tr><th>Command</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr><td><code>npm run dev</code></td><td>electron-vite dev + Electron window</td></tr>
+            <tr><td><code>npm run build</code></td><td>Compile to <code>out/</code></td></tr>
+            <tr><td><code>npm run package</code></td><td>Build + electron-builder (local)</td></tr>
+            <tr><td><code>npm run publish</code></td><td>Build + publish (GH release)</td></tr>
+            <tr><td><code>npm run typecheck:node</code></td><td>Main + preload TS</td></tr>
+            <tr><td><code>npm run typecheck:web</code></td><td>Renderer TS</td></tr>
+          </tbody>
+        </table>
+        <p>See also <code>CLAUDE.md</code>, <code>RELEASING.md</code>, <code>LiminaStudioIntegration.md</code>.</p>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const search = document.getElementById('search');
+    const tables = document.querySelectorAll('[data-searchable]');
+    search.addEventListener('input', () => {
+      const q = search.value.trim().toLowerCase();
+      tables.forEach((table) => {
+        table.querySelectorAll('tbody tr').forEach((row) => {
+          const text = row.textContent.toLowerCase();
+          row.classList.toggle('hidden', q.length > 0 && !text.includes(q));
+        });
+      });
+    });
+  </script>
+</body>
+</html>

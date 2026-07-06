@@ -1,0 +1,217 @@
+# Limina Library — codebase map (machine-readable)
+# Open docs/CODEMAP.html in a browser for the human view.
+# Regenerate when IPC surface or major modules change.
+
+meta:
+  app: limina-library
+  stack: [electron-31, react-18, zustand, tailwind, typescript, electron-vite, ffmpeg-static]
+  entrypoints:
+    main: src/main/index.ts
+    preload: src/preload/index.ts
+    renderer: src/renderer/src/main.tsx
+    shared_types: src/shared/types.ts
+  dev_commands:
+    dev: npm run dev
+    build: npm run build
+    package: npm run package
+    typecheck_node: npm run typecheck:node
+    typecheck_web: npm run typecheck:web
+
+architecture:
+  rule: "Renderer never uses Node APIs — only window.electronAPI (preload contextBridge)."
+  processes:
+    main: "Node/Electron — IPC handlers, audio HTTP server, ffmpeg, file I/O, MFB HTTPS"
+    preload: "contextBridge.exposeInMainWorld('electronAPI', api)"
+    renderer: "React + Zustand — all UI"
+  persistence:
+    catalogue: "{userData}/catalogue.json (+ 5 rotating backups catalogue.1..5.json)"
+    auth_token: "{userData}/auth.bin (safeStorage encrypted)"
+    settings: "localStorage key limina-settings-v1"
+
+# IPC: channel → preload method → handler file
+ipc:
+  library:
+    pickFolder: { api: pickFolder, handler: scanHandlers, returns: "string | null" }
+    buildWatchedFolder: { api: buildWatchedFolder, handler: scanHandlers, args: [folderPath] }
+    scanFolder: { api: scanFolder, handler: scanHandlers, args: [folderPath], returns: ScanResult }
+    scanFile: { api: scanFile, handler: scanHandlers, args: [filePath], returns: "LibraryFile | null" }
+    findOnDisk: { api: findOnDisk, handler: scanHandlers, args: [title, artist], returns: "string[]", note: "Spotlight (macOS) or PowerShell (Windows)" }
+    pickAudioFile: { api: pickAudioFile, handler: scanHandlers }
+    copyFile: { api: copyFile, handler: index.ts, note: "Writes path to clipboard" }
+    startDrag: { api: startDrag, handler: index.ts, sync: true, note: "Native file drag with waveform icon" }
+  catalogue:
+    load: { api: loadCatalogue, handler: catalogueHandlers, returns: "{ data, restoredFromBackup }" }
+    save: { api: saveCatalogue, handler: catalogueHandlers, note: "Atomic write via tmp rename" }
+    listBackups: { api: listCatalogueBackups, handler: catalogueHandlers }
+    restoreBackup: { api: restoreCatalogueBackup, handler: catalogueHandlers, args: [slot] }
+  audio:
+    getWaveformPeaks: { api: getWaveformPeaks, handler: audioHandlers, args: [filePath, numPeaks?], default_peaks: 800 }
+    getFileDuration: { api: getFileDuration, handler: audioHandlers, note: "ffmpeg pipe byte count @ 8kHz" }
+    getServerPort: { api: getAudioServerPort, handler: index.ts, note: "Local HTTP playback server port" }
+  mfb:
+    searchTracks: { api: mfbSearchTracks, handler: mfbHandlers, note: "Client-side filter on cached /tracks catalogue" }
+    getTrack: { api: mfbGetTrack, handler: mfbHandlers }
+    matchTracks: { api: mfbMatchTracks, handler: mfbHandlers, note: "Batch fuzzy match; threshold 0.25; fetches full track on hit" }
+    rankMatches: { api: mfbRankMatches, handler: mfbHandlers, note: "Top 8 manual candidates" }
+    clearCatalogue: { api: mfbClearCatalogue, handler: mfbHandlers, note: "Bust in-memory MFB catalogue cache" }
+  auth:
+    login: { api: authLogin, handler: authHandlers }
+    logout: { api: authLogout, handler: authHandlers }
+    me: { api: authMe, handler: authHandlers }
+    getUserPlaylists: { api: getUserPlaylists, handler: authHandlers }
+    getPlaylist: { api: getPlaylist, handler: authHandlers }
+    syncLibrary: { api: syncLibrary, handler: authHandlers, args: [trackIds], note: "POST /library/sync — matched MFB IDs only" }
+  studio:
+    saveSession: { api: studioSaveSession, handler: studioHandlers, args: [json, defaultName], returns: "saved path | null" }
+    openFile: { api: studioOpenFile, handler: studioHandlers, note: "shell.openPath (.limina)" }
+  shell_window:
+    showInFolder: { api: showInFolder, handler: index.ts }
+    setTitle: { api: setWindowTitle, handler: index.ts, fire_and_forget: true }
+    setZoom: { api: setZoom, handler: index.ts, fire_and_forget: true }
+  updater:
+    check: { api: checkForUpdates, handler: index.ts }
+    quitAndInstall: { api: quitAndInstall, handler: index.ts, fire_and_forget: true }
+    simulate: { api: simulateUpdate, handler: index.ts, dev_only: true }
+    downloading: { event: updater:downloading, api: onUpdateDownloading, direction: M→R }
+    downloaded: { event: updater:downloaded, api: onUpdateDownloaded, direction: M→R }
+
+audio_server:
+  location: src/main/index.ts — startAudioServer()
+  url_pattern: "http://127.0.0.1:{port}/{encodeURIComponent(filePath)}?sr={sampleRate}"
+  constraints:
+    - "Never WAV pipe for transcode — use ffmpeg→FLAC"
+    - "Resample to 48kHz when source sr > 48000 (Chromium 2× bug)"
+  direct_stream_exts: [mp3, m4a, mp4, aac, ogg, oga, opus, webm, flac]
+  wav_direct: "Only 16-bit PCM int (format code 1); else ffmpeg→FLAC"
+  internal_functions: [mimeForAudioExt, inspectWavFormat, startAudioServer, createDragIcon]
+
+main_process:
+  index.ts:
+    exports: []
+    functions: [initAutoUpdater, createDragIcon, mimeForAudioExt, inspectWavFormat, startAudioServer, createWindow]
+    registers: [registerScanHandlers, registerCatalogueHandlers, registerAudioHandlers, registerMfbHandlers, registerAuthHandlers, registerStudioHandlers]
+  scanHandlers.ts:
+    register: registerScanHandlers
+    helpers: [pickArtist, pickAlbum, fileId, inferPathArtistAlbum, walkDir]
+    scan: "music-metadata parseFile; SHA1 path id; path artist/album guesses"
+    extensions: [.wav, .mp3, .flac, .aiff, .aif, .m4a]
+  catalogueHandlers.ts:
+    register: registerCatalogueHandlers
+    helpers: [cataloguePath, backupPath, rotateBackups, hasContent]
+  audioHandlers.ts:
+    register: registerAudioHandlers
+    helpers: [extractPeaks]
+  mfbHandlers.ts:
+    register: registerMfbHandlers
+    base: https://musicforbreathwork.com/api
+    helpers: [fetchJson, getCatalogue, normalize, tokenize, jaccard, scoreMatch, isNameyFolder]
+    cache: "1h TTL; bust on auth change or mfbClearCatalogue"
+  authHandlers.ts:
+    register: registerAuthHandlers
+    exports: [loadToken, registerAuthHandlers]
+    helpers: [saveToken, clearToken, apiPost, apiGet]
+    base: https://musicforbreathwork.com/api
+  studioHandlers.ts:
+    register: registerStudioHandlers
+
+preload:
+  file: src/preload/index.ts
+  types: src/preload/index.d.ts
+  global: "window.electronAPI: LibraryAPI"
+
+stores:
+  libraryStore:
+    file: src/renderer/src/store/libraryStore.ts
+    hook: useLibraryStore
+    state:
+      - watchedFolders, files, removedFiles
+      - selectedFileId, selectedFolderId, selectedTags
+      - scanning, pendingMatches
+      - userAccount, showLoginModal, loginFlash
+      - playlists, selectedPlaylistId, selectedPlaylistDetail, selectedMissingTrackId, playlistSessions
+      - unmatchedOnly, previewFileId, previewQueue
+    actions:
+      auth_ui: [setUserAccount, setShowLoginModal, setLoginFlash]
+      playlists: [setPlaylists, selectPlaylist, setPlaylistDetail, selectMissingTrack, setPlaylistSession]
+      catalogue: [loadCatalogue, toCatalogue, addWatchedFolder, removeWatchedFolder]
+      files: [addFiles, updateFile, removeFile, removeFiles, restoreFile]
+      selection: [selectFile, selectFolder, selectTag, toggleSelectedTag, clearSelectedTags]
+      mfb_matching: [setPendingMatch, applyPendingMatch, clearPendingMatch, applyAllPendingMatches, unlinkMfb, resetUnmatchedIndexing, resetAllIndexing]
+      other: [setScanning, setUnmatchedOnly, setPreview]
+  updaterStore:
+    file: src/renderer/src/store/updaterStore.ts
+    hook: useUpdaterStore
+    state: [downloading, downloadPercent, readyVersion]
+    actions: [setDownloading, setReady]
+
+renderer_lib:
+  syncLibrary.ts:
+    syncLibraryToMfb: "POST matched mfbTrackIds; skips if files empty"
+  libraryTrackDisplay.ts:
+    - displayedArtist, displayedAlbum
+    - artistGuessPendingItalic, albumGuessPendingItalic, hasPendingPathGuess
+    - artistSortKey, albumSortKey, pathGuessUpdatesForApply
+  settings.ts:
+    - loadSettings, saveSettings, applySettings
+    - ACCENT_PRESETS, ZOOM_OPTIONS
+
+components:
+  App.tsx:
+    role: "Root layout, catalogue load/save, MFB batch indexing loop, panel routing"
+    key_flows: [startup loadCatalogue, auto-save debounced, indexing BATCH_SIZE=50]
+  FolderPanel.tsx:
+    role: "Left sidebar — folders, tags, playlists, add folder"
+  FileList.tsx:
+    role: "Virtualized track table, sort/filter, duplicates, pending matches"
+  PropertiesPanel.tsx:
+    role: "Right panel — metadata, tags, MFB links, mix cues, duplicates"
+  PlaylistPanel.tsx:
+    role: "Playlist detail when selected; Limina Studio session export"
+  MissingTrackPanel.tsx:
+    role: "Resolve playlist tracks missing from library"
+  PlayerBar.tsx:
+    role: "Bottom audio player via local HTTP server"
+  WaveformPreview.tsx:
+    role: "Canvas waveform + cue markers"
+  MixCueEditorModal.tsx:
+    role: "Intro/outro/clip/fade curve editor"
+  TrackLookup.tsx:
+    role: "Manual MFB search + rank matches for one file"
+  AccountButton.tsx:
+    role: "Login/logout, playlist fetch"
+  IndexingLog.tsx:
+    role: "Indexing activity log overlay"
+  SettingsPanel.tsx:
+    role: "Zoom + accent color"
+  ReindexDialog.tsx:
+    role: "Reset unmatched vs all MFB indexing"
+  GuidedTour.tsx:
+    role: "Onboarding spotlight tour"
+
+shared_types:
+  file: src/shared/types.ts
+  reexport: src/renderer/src/types/index.ts
+  core:
+    - LibraryFile, WatchedFolder, Catalogue, ScanResult
+    - MfbMatch, MfbTag, MfbAudioFeatures
+    - MfbPlaylist, MfbPlaylistDetail, MfbPlaylistTrack, MfbPlaylistSegment
+    - BreathworkPhase, BREATHWORK_PHASES, PHASE_COLORS
+  helpers:
+    - phaseColorForTag, mfbTrackUrl, appleMusicDeepLink
+
+external_apis:
+  mfb:
+    base: https://musicforbreathwork.com/api
+    endpoints:
+      - "GET /tracks (catalogue cache)"
+      - "GET /tracks/:id"
+      - "POST /auth/login, /auth/logout"
+      - "GET /auth/me"
+      - "GET /user/playlists"
+      - "GET /playlist/:id"
+      - "POST /library/sync { track_ids }"
+
+ui_layout:
+  columns: "FolderPanel | center (FileList | PlaylistPanel) | PropertiesPanel | MissingTrackPanel"
+  bottom: PlayerBar
+  overlays: [IndexingLog, GuidedTour, SettingsPanel, ReindexDialog, MixCueEditorModal, login modal]

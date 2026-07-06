@@ -40,6 +40,7 @@ export interface LibraryAPI {
   // Waveform
   getWaveformPeaks: (filePath: string, numPeaks?: number) => Promise<number[]>
   getFileDuration: (filePath: string) => Promise<number>
+  analyzeCues: (filePath: string) => Promise<{ introEndMs: number | null; outroStartMs: number | null }>
 
   // Audio server
   getAudioServerPort: () => Promise<number>

@@ -18,6 +18,8 @@ const api: LibraryAPI = {
     ipcRenderer.invoke('audio:getWaveformPeaks', filePath, numPeaks),
   getFileDuration: (filePath) =>
     ipcRenderer.invoke('audio:getFileDuration', filePath),
+  analyzeCues: (filePath) =>
+    ipcRenderer.invoke('audio:analyzeCues', filePath),
 
   getAudioServerPort: () => ipcRenderer.invoke('audio:getServerPort'),
 

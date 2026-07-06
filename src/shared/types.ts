@@ -92,6 +92,7 @@ export interface LibraryFile {
   fadeOutCurve: number
   clipStartMs: number | null      // ms from file start where clip begins; null = file start
   clipEndMs: number | null        // ms from file start where clip ends; null = file end
+  cuesAnalyzed: boolean           // whether the Auto-Mix cue scan has run (populates intro/outro)
 }
 
 export interface MfbTag { id: number; name: string; slug: { en: string } }
@@ -194,6 +195,14 @@ export interface Catalogue {
   removedFiles?: LibraryFile[]
   /** Maps MFB playlist ID → saved .limina file path */
   playlistSessions?: Record<number, string>
+  /** Auto-Mix per-track fade-in points (file id → ms into the file). */
+  mixFadeIns?: Record<string, number>
+  /** Auto-Mix default crossfade length (ms). */
+  mixFadeMs?: number
+  /** Saved Auto-Mixes (queue templates + settings). Typed loosely to avoid a renderer dep. */
+  savedMixes?: unknown[]
+  /** Recorded Generate sessions (skeleton + realized tracklist). Typed loosely. */
+  sessions?: unknown[]
 }
 
 export interface ScanResult {

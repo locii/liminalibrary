@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 
-interface TourStep {
+export interface TourStep {
   id: string
   title: string
   body: string
@@ -10,7 +10,7 @@ interface TourStep {
   spotlight?: boolean
 }
 
-const STEPS: TourStep[] = [
+const LIBRARY_STEPS: TourStep[] = [
   {
     id: 'welcome',
     title: 'Welcome to Limina Library',
@@ -197,14 +197,15 @@ function TooltipBox({
 
 interface Props {
   onClose: () => void
+  steps?: TourStep[]
 }
 
-export function GuidedTour({ onClose }: Props): JSX.Element {
+export function GuidedTour({ onClose, steps = LIBRARY_STEPS }: Props): JSX.Element {
   const [stepIndex, setStepIndex] = useState(0)
   const [targetRect, setTargetRect] = useState<Rect | null>(null)
   const rafRef = useRef<number | null>(null)
 
-  const step = STEPS[stepIndex]
+  const step = steps[stepIndex]
 
   const updateRect = useCallback(() => {
     if (step.target) {
@@ -234,9 +235,9 @@ export function GuidedTour({ onClose }: Props): JSX.Element {
   }, [step.target])
 
   const handleNext = useCallback(() => {
-    if (stepIndex >= STEPS.length - 1) { onClose(); return }
+    if (stepIndex >= steps.length - 1) { onClose(); return }
     setStepIndex((i) => i + 1)
-  }, [stepIndex, onClose])
+  }, [stepIndex, onClose, steps.length])
 
   const handlePrev = useCallback(() => {
     setStepIndex((i) => Math.max(0, i - 1))
@@ -299,7 +300,7 @@ export function GuidedTour({ onClose }: Props): JSX.Element {
         step={step}
         targetRect={targetRect}
         stepIndex={stepIndex}
-        total={STEPS.length}
+        total={steps.length}
         onNext={handleNext}
         onPrev={handlePrev}
         onSkip={onClose}

@@ -11,9 +11,10 @@
  * slash, and encode each segment. The main-process server strips the leading
  * slash back off for Windows drive paths.
  */
-export function audioStreamUrl(port: number, filePath: string, sampleRate?: number): string {
+export function audioStreamUrl(port: number, filePath: string, sampleRate?: number, startMs?: number): string {
   const slashed = filePath.replace(/\\/g, '/')
   const withLeadingSlash = slashed.startsWith('/') ? slashed : `/${slashed}`
   const encoded = withLeadingSlash.split('/').map(encodeURIComponent).join('/')
-  return `http://127.0.0.1:${port}${encoded}?sr=${sampleRate ?? 0}`
+  const ss = startMs && startMs > 0 ? `&ss=${(startMs / 1000).toFixed(3)}` : ''
+  return `http://127.0.0.1:${port}${encoded}?sr=${sampleRate ?? 0}${ss}`
 }
