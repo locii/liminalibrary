@@ -20,6 +20,7 @@ import { loadSettings, saveSettings, applySettings } from './lib/settings'
 import type { AppSettings } from './lib/settings'
 import { syncLibraryToMfb } from './lib/syncLibrary'
 import { runCueScan } from './lib/cueScan'
+import { runFeatureScan, cancelFeatureScan } from './lib/featureScan'
 import { useUpdaterStore } from './store/updaterStore'
 
 
@@ -54,6 +55,7 @@ export default function App(): JSX.Element {
   const [showReindexDialog, setShowReindexDialog] = useState(false)
   const userAccount = useLibraryStore((s) => s.userAccount)
 
+  const featureScan = useLibraryStore((s) => s.featureScan)
   const [indexing, setIndexing] = useState(false)
   const [showLog, setShowLog] = useState(false)
   const selectFile = useLibraryStore((s) => s.selectFile)
@@ -148,6 +150,8 @@ export default function App(): JSX.Element {
         if (hasNew && !cancelledRef.current && state.userAccount) { setIndexing(true); scheduleNextRef.current?.(5000) }
         // Auto-Mix cue analysis runs regardless of auth (local ffmpeg only).
         if (state.files.some((f) => !f.cuesAnalyzed)) runCueScan()
+        // Estimate audio features for any file still lacking them (Reccobeats).
+        if (state.files.some((f) => !f.audioFeatures && !f.featuresAnalyzed)) runFeatureScan()
       }
     })
   }, [])
@@ -181,33 +185,10 @@ export default function App(): JSX.Element {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userAccount, catalogueLoaded])
 
-  // Back-fill albumImageUrl for matched files that predate the feature.
-  const albumArtFetchedRef = useRef(false)
-  useEffect(() => {
-    if (!userAccount || !catalogueLoaded || albumArtFetchedRef.current) return
-    albumArtFetchedRef.current = true
-    const missing = useLibraryStore.getState().files.filter(
-      (f) => f.mfbTrackId !== null && !f.albumImageUrl
-    )
-    if (missing.length === 0) return
-    ;(async () => {
-      for (const f of missing) {
-        if (!useLibraryStore.getState().userAccount) break
-        try {
-          const data = await window.electronAPI.mfbGetTrack(f.mfbTrackId!) as {
-            album?: { image_url?: string }
-          }
-          if (data?.album?.image_url) {
-            useLibraryStore.getState().updateFile(f.id, { albumImageUrl: data.album.image_url })
-          }
-        } catch (err) {
-          if (err instanceof Error && err.message === 'NOT_AUTHENTICATED') break
-          /* ignore other per-track failures */
-        }
-      }
-    })()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userAccount, catalogueLoaded])
+  // (Album art for legacy matched files is filled in per-track on demand via the
+  // "Re-fetch from MFB" action — no bulk startup backfill, to avoid draining the
+  // MFB API's per-user rate limit.)
+
   // Reset on logout so the next login triggers a fresh sync
   useEffect(() => {
     if (!userAccount) syncReadyRef.current = false
@@ -227,6 +208,14 @@ export default function App(): JSX.Element {
   useEffect(() => {
     if (!catalogueLoaded) return
     const t = setTimeout(() => { runCueScan() }, 4000)
+    return () => clearTimeout(t)
+  }, [catalogueLoaded])
+
+  // Background feature scan for non-catalogue tracks (Reccobeats). Runs after the
+  // cue scan so MFB matching gets first crack at populating real audio features.
+  useEffect(() => {
+    if (!catalogueLoaded) return
+    const t = setTimeout(() => { runFeatureScan() }, 15000)
     return () => clearTimeout(t)
   }, [catalogueLoaded])
 
@@ -405,6 +394,23 @@ export default function App(): JSX.Element {
             <path d="M2.6 2.6l1.1 1.1M8.3 8.3l1.1 1.1M9.4 2.6L8.3 3.7M3.7 8.3L2.6 9.4" />
           </svg>
           Re-index
+        </button>
+      )}
+      {hasContent && (
+        <button
+          type="button"
+          onClick={() => featureScan.running ? cancelFeatureScan() : runFeatureScan({ force: true })}
+          className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-gray-300 hover:bg-surface-hover hover:text-gray-100 transition-colors"
+          title={featureScan.running ? 'Stop estimating audio features' : 'Re-estimate audio features for all non-catalogue tracks via a 30s clip sent to Reccobeats'}
+        >
+          {featureScan.running ? (
+            <svg className="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="currentColor"><rect x="3" y="3" width="6" height="6" rx="1" /></svg>
+          ) : (
+            <svg className="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round">
+              <path d="M1 6h1.5M9.5 6H11M3.5 3.5v5M6 1.5v9M8.5 3.5v5" />
+            </svg>
+          )}
+          {featureScan.running ? `Stop estimating… ${featureScan.done}/${featureScan.total}` : 'Rescan Audio Features'}
         </button>
       )}
       <div className="my-1 border-t border-surface-border" />

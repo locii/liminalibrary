@@ -7,6 +7,7 @@ import type { MfbAudioFeatures } from '../types'
 import { WaveformPreview } from './WaveformPreview'
 import { TrackLookup } from './TrackLookup'
 import { MixCueEditorModal } from './MixCueEditorModal'
+import { SpotifyImportModal } from './SpotifyImportModal'
 
 function formatMs(ms: number): string {
   const s = ms / 1000
@@ -124,6 +125,7 @@ export function PropertiesPanel(): JSX.Element {
   const [rescanning, setRescanning] = useState(false)
   const [refreshed, setRefreshed] = useState(false)
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [showImportModal, setShowImportModal] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmUnlink, setConfirmUnlink] = useState(false)
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -224,6 +226,46 @@ export function PropertiesPanel(): JSX.Element {
         </p>
       </div>
     )
+  }
+
+  // Fetch a track's full detail from MFB and apply it to this file. Shared by
+  // "Re-fetch from MFB" (existing match) and "Fetch from Music for Breathwork"
+  // (Spotify import of an unmatched file). Returns false if the track couldn't
+  // be loaded.
+  const applyMfbTrack = async (trackId: number): Promise<boolean> => {
+    const data = (await window.electronAPI.mfbGetTrack(trackId)) as {
+      id: number; title: string; description: string
+      artists: { id: number; name: string }[]
+      album: { id: number; title: string; image_url: string }
+      tags: Record<string, { id: number; name: string; slug: { en: string } }[]>
+      audio_features?: MfbAudioFeatures
+      streaming?: { bandcamp_url?: string; beatport_url?: string }
+    }
+    if (!data?.id || !data?.title) return false
+    const tagsData = data.tags ?? {}
+    const artist = (data.artists ?? []).map((a) => a.name).join(', ')
+    const tags = Object.values(tagsData).flat().map((t) => t.name)
+    const hourSlug = tagsData['Hour']?.[0]?.slug?.en
+    // Only treat features as real if they're actually populated — a track that's
+    // still enriching returns an audio_features object full of nulls, which we
+    // must not apply (it would render broken bars and mark the file as analysed).
+    const feat = data.audio_features
+    const hasRealFeatures = !!feat && Number.isFinite(feat.energy) && Number.isFinite(feat.intensity)
+    updateFile(file.id, {
+      artist, album: data.album?.title ?? '', tags,
+      notes: data.description ?? '',
+      trackTitle: data.title,
+      mfbTrackId: data.id,
+      mfbApplied: true,
+      appliedPathGuess: true,
+      albumImageUrl: data.album?.image_url ?? null,
+      audioFeatures: hasRealFeatures ? feat : (file.audioFeatures ?? null),
+      audioFeaturesEstimated: hasRealFeatures ? false : file.audioFeaturesEstimated,
+      bandcampUrl: data.streaming?.bandcamp_url ?? null,
+      beatportUrl: data.streaming?.beatport_url ?? null,
+      ...(hourSlug ? { breathworkPhase: hourSlug as import('../types').BreathworkPhase } : {}),
+    })
+    return true
   }
 
   return (
@@ -404,6 +446,22 @@ export function PropertiesPanel(): JSX.Element {
                   Copy file path
                 </button>
 
+                {/* Unmatched file: search Music for Breathwork (via Spotify) and
+                    pick the exact track to inherit its data + features. */}
+                {!file.mfbTrackId && userAccount && file.duration > 0 && file.fileName && (
+                  <button
+                    type="button"
+                    onClick={() => { setShowMenu(false); setShowImportModal(true) }}
+                    className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-gray-300 hover:bg-surface-hover transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5 shrink-0 text-gray-500" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4.5 11.5A3 3 0 0 1 4 5.6 4 4 0 0 1 11.8 6 2.75 2.75 0 0 1 11.5 11.5" />
+                      <path d="M8 7.5v5M6 10.5l2 2 2-2" />
+                    </svg>
+                    Find on Music for Breathwork…
+                  </button>
+                )}
+
                 {file.mfbTrackId && (
                   <>
                     {userAccount && (
@@ -415,31 +473,8 @@ export function PropertiesPanel(): JSX.Element {
                         if (!file.mfbTrackId) return
                         setRescanning(true)
                         try {
-                          const data = (await window.electronAPI.mfbGetTrack(file.mfbTrackId)) as {
-                            id: number; title: string; description: string
-                            artists: { id: number; name: string }[]
-                            album: { id: number; title: string; image_url: string }
-                            tags: Record<string, { id: number; name: string; slug: { en: string } }[]>
-                            audio_features?: MfbAudioFeatures
-                            streaming?: { bandcamp_url?: string; beatport_url?: string }
-                          }
-                          if (!data?.id || !data?.title) return
-                          const tagsData = data.tags ?? {}
-                          const artist = (data.artists ?? []).map((a) => a.name).join(', ')
-                          const tags = Object.values(tagsData).flat().map((t) => t.name)
-                          const hourSlug = tagsData['Hour']?.[0]?.slug?.en
-                          updateFile(file.id, {
-                            artist, album: data.album?.title ?? '', tags,
-                            notes: data.description ?? '',
-                            trackTitle: data.title,
-                            mfbApplied: true,
-                            appliedPathGuess: true,
-                            albumImageUrl: data.album?.image_url ?? null,
-                            audioFeatures: data.audio_features ?? null,
-                            bandcampUrl: data.streaming?.bandcamp_url ?? null,
-                            beatportUrl: data.streaming?.beatport_url ?? null,
-                            ...(hourSlug ? { breathworkPhase: hourSlug as import('../types').BreathworkPhase } : {}),
-                          })
+                          const ok = await applyMfbTrack(file.mfbTrackId)
+                          if (!ok) return
                           if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
                           setRefreshed(true)
                           refreshTimerRef.current = setTimeout(() => setRefreshed(false), 3000)
@@ -722,6 +757,11 @@ export function PropertiesPanel(): JSX.Element {
           <SectionHeader label="Audio Features" open={sections.audioFeatures} onToggle={() => toggleSection('audioFeatures')} />
           {sections.audioFeatures && (
             <div className="flex flex-col gap-1.5 mt-1">
+              {file.audioFeaturesEstimated && (
+                <p className="text-[10px] text-gray-500 leading-snug -mt-0.5 mb-0.5" title="This track isn't in the Music for Breathwork catalogue. Features were estimated locally from a 30s clip via Reccobeats and may be approximate.">
+                  <span className="text-accent">≈ Estimated</span> · not in the MFB catalogue
+                </p>
+              )}
               <AudioFeatureBar label="Intensity" value={file.audioFeatures.intensity} />
               <AudioFeatureBar label="Activation" value={file.audioFeatures.activation_intensity} />
               <AudioFeatureBar label="Affective" value={file.audioFeatures.affective_intensity} />
@@ -732,8 +772,8 @@ export function PropertiesPanel(): JSX.Element {
               <AudioFeatureLabelRow label="Danceability" text={file.audioFeatures.danceability_label} value={file.audioFeatures.danceability} />
               <div className="flex justify-between items-center">
                 <span className="text-[10px] text-gray-500 w-20 shrink-0">Tempo</span>
-                <span className="text-[10px] text-gray-200">{file.audioFeatures.tempo_label}</span>
-                <span className="text-[10px] text-gray-400 tabular-nums">{file.audioFeatures.tempo.toFixed(0)} BPM</span>
+                <span className="text-[10px] text-gray-200">{file.audioFeatures.tempo_label || '—'}</span>
+                <span className="text-[10px] text-gray-400 tabular-nums">{Number.isFinite(file.audioFeatures.tempo) ? `${file.audioFeatures.tempo.toFixed(0)} BPM` : '—'}</span>
               </div>
             </div>
           )}
@@ -896,6 +936,25 @@ export function PropertiesPanel(): JSX.Element {
         />
       )}
 
+      {showImportModal && (
+        <SpotifyImportModal
+          fileName={file.fileName}
+          artist={file.artist}
+          folderArtist={file.artistPathGuess}
+          duration={file.duration}
+          onImported={async (trackId) => {
+            const ok = await applyMfbTrack(trackId)
+            window.electronAPI.mfbClearCatalogue()
+            if (ok) {
+              if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+              setRefreshed(true)
+              refreshTimerRef.current = setTimeout(() => setRefreshed(false), 3000)
+            }
+          }}
+          onClose={() => setShowImportModal(false)}
+        />
+      )}
+
       </div>{/* end scrollable metadata */}
     </div>
   )
@@ -1017,26 +1076,28 @@ function TagInput({ onAdd }: { onAdd: (tag: string) => void }): JSX.Element {
   )
 }
 
-function AudioFeatureBar({ label, value }: { label: string; value: number }): JSX.Element {
+function AudioFeatureBar({ label, value }: { label: string; value: number | null | undefined }): JSX.Element {
+  const v = typeof value === 'number' && Number.isFinite(value) ? value : null
   return (
     <div className="flex gap-2 items-center">
       <span className="text-[10px] text-gray-400 w-20 shrink-0">{label}</span>
       <div className="overflow-hidden flex-1 h-1 rounded-full bg-surface-hover">
-        <div className="h-full rounded-full bg-accent/50" style={{ width: `${Math.round(value * 100)}%` }} />
+        <div className="h-full rounded-full bg-accent/50" style={{ width: `${Math.round((v ?? 0) * 100)}%` }} />
       </div>
-      <span className="text-[10px] text-gray-300 tabular-nums w-8 text-right">{value.toFixed(2)}</span>
+      <span className="text-[10px] text-gray-300 tabular-nums w-8 text-right">{v === null ? '—' : v.toFixed(2)}</span>
     </div>
   )
 }
 
-function AudioFeatureLabelRow({ label, text, value }: { label: string; text: string; value: number }): JSX.Element {
+function AudioFeatureLabelRow({ label, text, value }: { label: string; text: string; value: number | null | undefined }): JSX.Element {
+  const v = typeof value === 'number' && Number.isFinite(value) ? value : 0
   return (
     <div className="flex gap-2 items-center">
       <span className="text-[10px] text-gray-400 w-20 shrink-0">{label}</span>
       <div className="overflow-hidden flex-1 h-1 rounded-full bg-surface-hover">
-        <div className="h-full rounded-full bg-accent/50" style={{ width: `${Math.round(value * 100)}%` }} />
+        <div className="h-full rounded-full bg-accent/50" style={{ width: `${Math.round(v * 100)}%` }} />
       </div>
-      <span className="text-[10px] text-gray-200 text-right truncate max-w-[90px]">{text}</span>
+      <span className="text-[10px] text-gray-200 text-right truncate max-w-[90px]">{text || '—'}</span>
     </div>
   )
 }

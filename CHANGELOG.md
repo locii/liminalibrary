@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.2.0 — Enrich your own tracks
+
+Bring Music for Breathwork's track data and audio features to music that isn't in the catalogue yet, so your whole library can drive Session Mode — not just matched tracks.
+
+- **Find on Music for Breathwork** — For any unmatched track, open the ⋯ menu → **Find on Music for Breathwork…**, search, and pick the exact track. Your file inherits its real artist, album, artwork and audio features. (It's added to the catalogue privately, credited to you; you can choose to list it publicly later.)
+- **Estimated audio features** — Tracks that aren't in the catalogue now have their audio features estimated locally — energy, valence, tension, spaciousness and more — so they join the Session Mode Feel EQ on the same scale as catalogue tracks. Re-estimate anytime from the library menu, and stop a running scan.
+
 ## v2.1.0 — Free Session Mode
 
 Session Mode is now free to play. Anyone can build and play a live, auto-crossfading mix from their library — tags, Feel EQ, the Up Next queue and generators, transport, and the crossfade slider all work without an account. The pro tools that keep what you play are reserved for **Music for Breathwork Pro**.

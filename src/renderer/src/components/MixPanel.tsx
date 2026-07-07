@@ -55,6 +55,8 @@ export function MixPanel(): JSX.Element {
   const mixQueue = useLibraryStore((s) => s.mixQueue)
   const addQueueTrack = useLibraryStore((s) => s.addQueueTrack)
   const addQueueTags = useLibraryStore((s) => s.addQueueTags)
+  const previewFileId = useLibraryStore((s) => s.previewFileId)
+  const setPreview = useLibraryStore((s) => s.setPreview)
   const setQueueItemMatch = useLibraryStore((s) => s.setQueueItemMatch)
   const setQueueItemDuration = useLibraryStore((s) => s.setQueueItemDuration)
   const setQueueItemUpcoming = useLibraryStore((s) => s.setQueueItemUpcoming)
@@ -147,6 +149,8 @@ export function MixPanel(): JSX.Element {
     return raw.map((r) => ({ file: r.file, feel: r.has ? (r.s - min) / range : null }))
   }, [filteredPool, featureTargetEntries])
   const visiblePool = useMemo(() => poolScored.slice(0, visibleCount), [poolScored, visibleCount])
+  // Preview queue = the full filtered pool, so preview next/random stays in the pool.
+  const poolIds = useMemo(() => poolScored.map((p) => p.file.id), [poolScored])
   const onPoolScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) setVisibleCount((c) => (c < filteredPool.length ? c + 80 : c))
@@ -883,7 +887,7 @@ export function MixPanel(): JSX.Element {
             {filteredPool.length === 0 ? (
               <p className="px-4 py-6 text-[11px] text-gray-600 text-center">{pool.length === 0 ? 'No tracks match these tags.' : `No tracks match “${poolQuery}”.`}</p>
             ) : (
-              <PoolList items={visiblePool} selectedId={selectedId} onAdd={addQueueTrack} onSelect={setSelectedId} />
+              <PoolList items={visiblePool} selectedId={selectedId} previewFileId={previewFileId} onAdd={addQueueTrack} onSelect={setSelectedId} onPreview={setPreview} poolIds={poolIds} />
             )}
           </div>
         </div>
@@ -966,15 +970,20 @@ function PreviewIconButton({ onClick }: { onClick: (e: React.MouseEvent) => void
 }
 
 // --- Available pool list ---------------------------------------------------
-const PoolList = memo(function PoolList({ items, selectedId, onAdd, onSelect }: {
+const PoolList = memo(function PoolList({ items, selectedId, previewFileId, onAdd, onSelect, onPreview, poolIds }: {
   items: { file: LibraryFile; feel: number | null }[]
   selectedId: string | null
+  previewFileId: string | null
   onAdd: (fileId: string) => void
   onSelect: (id: string) => void
+  onPreview: (fileId: string | null, queue: string[]) => void
+  poolIds: string[]
 }): JSX.Element {
   return (
     <>
-      {items.map(({ file: f, feel }) => (
+      {items.map(({ file: f, feel }) => {
+        const isPreviewing = previewFileId === f.id
+        return (
         <div key={f.id} draggable
           onDoubleClick={() => onAdd(f.id)}
           onDragStart={(e) => { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData(MIX_TRACK_DND_TYPE, f.id) }}
@@ -983,6 +992,15 @@ const PoolList = memo(function PoolList({ items, selectedId, onAdd, onSelect }: 
           <button type="button" onClick={(e) => { e.stopPropagation(); onAdd(f.id) }}
             className="flex items-center justify-center w-4 h-4 text-gray-600 transition-colors rounded shrink-0 hover:text-accent hover:bg-accent/10" title="Add to queue">
             <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M5 1v8M1 5h8" /></svg>
+          </button>
+          <button type="button" onClick={(e) => { e.stopPropagation(); isPreviewing ? onPreview(null, []) : onPreview(f.id, poolIds) }}
+            className={`flex items-center justify-center w-4 h-4 rounded-full border transition-colors shrink-0 ${isPreviewing ? 'opacity-100 border-accent text-accent' : 'text-gray-600 border-gray-600 opacity-0 group-hover:opacity-100 hover:border-accent hover:text-accent'}`}
+            title={isPreviewing ? 'Stop preview' : 'Preview track'}>
+            {isPreviewing ? (
+              <svg className="w-2 h-2" viewBox="0 0 10 10" fill="currentColor"><rect x="1.5" y="1" width="2.5" height="8" rx="0.5" /><rect x="6" y="1" width="2.5" height="8" rx="0.5" /></svg>
+            ) : (
+              <svg className="w-2 h-2" viewBox="0 0 10 10" fill="currentColor"><path d="M2 1.5l7 3.5-7 3.5V1.5z" /></svg>
+            )}
           </button>
           <span className="flex-1 truncate">{f.trackTitle || f.fileName}</span>
           {feel != null && (
@@ -996,7 +1014,8 @@ const PoolList = memo(function PoolList({ items, selectedId, onAdd, onSelect }: 
           {feel == null && f.artist && <span className="truncate text-gray-600 max-w-[34%]">{f.artist}</span>}
           <PreviewIconButton onClick={(e) => { e.stopPropagation(); onSelect(f.id) }} />
         </div>
-      ))}
+        )
+      })}
     </>
   )
 })

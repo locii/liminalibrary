@@ -82,6 +82,8 @@ export interface LibraryFile {
   mfbApplied: boolean  // whether an MFB match was applied to this track
   mfbMatchRejected: boolean  // user dismissed a pending match; skip auto re-indexing
   audioFeatures: MfbAudioFeatures | null
+  audioFeaturesEstimated: boolean  // true when audioFeatures came from local Reccobeats analysis, not an MFB match
+  featuresAnalyzed: boolean         // whether the local feature scan has attempted this file (avoids retry loops)
   albumImageUrl: string | null
   bandcampUrl: string | null
   beatportUrl: string | null
@@ -125,6 +127,16 @@ export interface MfbMatch {
   bandcamp_url?: string
   beatport_url?: string
   apple_music_url?: string
+}
+
+/** A Spotify search result shown in the import picker for the user to choose. */
+export interface SpotifySearchCandidate {
+  spotify_id: string
+  title: string
+  artist: string
+  album: string
+  image_url: string | null
+  duration: number | null
 }
 
 export function appleMusicDeepLink(url: string): string {

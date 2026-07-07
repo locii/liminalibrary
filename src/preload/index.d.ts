@@ -1,4 +1,4 @@
-import type { WatchedFolder, LibraryFile, ScanResult, Catalogue, MfbMatch, MfbPlaylist, MfbPlaylistDetail, PlaylistTrackSearchResult } from '../shared/types'
+import type { WatchedFolder, LibraryFile, ScanResult, Catalogue, MfbMatch, MfbPlaylist, MfbPlaylistDetail, PlaylistTrackSearchResult, MfbAudioFeatures, SpotifySearchCandidate } from '../shared/types'
 
 export interface MfbMatchEntry {
   id: string
@@ -22,6 +22,23 @@ export interface MfbRankResult {
   score: number
 }
 
+export interface SpotifyImportEntry {
+  /** Pick an exact track (from spotifySearch); when set, title/duration are ignored. */
+  spotify_id?: string
+  title?: string
+  artist?: string
+  album?: string
+  duration?: number
+}
+
+export interface SpotifyImportResult {
+  id: number | null
+  spotify_id?: string
+  enriching?: boolean
+  reason?: 'no_spotify_match' | 'exists_private'
+}
+
+
 export interface LibraryAPI {
   // Folder management
   pickFolder: () => Promise<string | null>
@@ -41,6 +58,7 @@ export interface LibraryAPI {
   getWaveformPeaks: (filePath: string, numPeaks?: number) => Promise<number[]>
   getFileDuration: (filePath: string) => Promise<number>
   analyzeCues: (filePath: string) => Promise<{ introEndMs: number | null; outroStartMs: number | null }>
+  analyzeFeatures: (filePath: string, durationSec: number) => Promise<{ features: MfbAudioFeatures | null; retriable: boolean }>
 
   // Audio server
   getAudioServerPort: () => Promise<number>
@@ -58,6 +76,8 @@ export interface LibraryAPI {
   mfbMatchTracks: (entries: MfbMatchEntry[]) => Promise<MfbMatchResult[]>
   mfbRankMatches: (entry: MfbMatchEntry) => Promise<MfbRankResult[]>
   mfbClearCatalogue: () => Promise<void>
+  spotifySearch: (q: string) => Promise<{ candidates: SpotifySearchCandidate[]; error?: string }>
+  spotifyImport: (entry: SpotifyImportEntry) => Promise<SpotifyImportResult>
 
   authLogin: (email: string, password: string) => Promise<{ id: number; name: string; email: string }>
   authLogout: () => Promise<void>

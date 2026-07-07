@@ -3,6 +3,7 @@ import { useLibraryStore } from '../store/libraryStore'
 import { phaseColorForTag } from '../types'
 import { syncLibraryToMfb } from '../lib/syncLibrary'
 import { runCueScan } from '../lib/cueScan'
+import { runFeatureScan } from '../lib/featureScan'
 import { getMixEngine } from '../lib/mixEngineSingleton'
 import type { MixSession } from '../store/libraryStore'
 
@@ -112,6 +113,7 @@ export function FolderPanel({ onAddFolder, onRescan }: Props): JSX.Element {
   const playlistTrackQuery = useLibraryStore((s) => s.playlistTrackQuery)
   const setPlaylistTrackQuery = useLibraryStore((s) => s.setPlaylistTrackQuery)
   const cueScan = useLibraryStore((s) => s.cueScan)
+  const featureScan = useLibraryStore((s) => s.featureScan)
   const mixSessions = useLibraryStore((s) => s.mixSessions)
   const enterMixMode = useLibraryStore((s) => s.enterMixMode)
   const loadSession = useLibraryStore((s) => s.loadSession)
@@ -743,6 +745,14 @@ export function FolderPanel({ onAddFolder, onRescan }: Props): JSX.Element {
               onClick={() => { runCueScan({ force: true }); setContextMenu(null) }}
             >
               {cueScan.running ? `Scanning cue points… ${cueScan.done}/${cueScan.total}` : 'Scan track cue points'}
+            </button>
+            <button
+              type="button"
+              disabled={featureScan.running}
+              className="w-full px-3 py-1.5 text-left text-gray-300 hover:bg-surface-hover transition-colors disabled:opacity-50"
+              onClick={() => { runFeatureScan({ force: true }); setContextMenu(null) }}
+            >
+              {featureScan.running ? `Estimating audio features… ${featureScan.done}/${featureScan.total}` : 'Estimate audio features'}
             </button>
             <div className="my-0.5 border-t border-surface-border" />
             <button

@@ -20,6 +20,7 @@ import type { LibraryFile, MfbPlaylistTrack } from '../types'
 import { mfbTrackUrl, phaseColorForTag } from '../types'
 import { useLibraryStore } from '../store/libraryStore'
 import { syncLibraryToMfb } from '../lib/syncLibrary'
+import { analyzeFileFeatures, analyzingFeatureIds, subscribeAnalyzing } from '../lib/featureScan'
 
 const COLUMN_STORAGE_KEY = 'library-file-list-column-widths-v7'
 const GRIP_PX = 8
@@ -323,6 +324,9 @@ export function FileList(): JSX.Element {
   }, [])
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  // Re-render when on-demand feature analysis starts/finishes so per-row state updates.
+  const [, forceAnalyzingTick] = useState(0)
+  useEffect(() => subscribeAnalyzing(() => forceAnalyzingTick((n) => n + 1)), [])
   const [multiSelectedIds, setMultiSelectedIds] = useState<Set<string>>(new Set())
   const [rowTooltip, setRowTooltip] = useState<{ file: LibraryFile; x: number; y: number } | null>(null)
   const rowTooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -799,6 +803,11 @@ export function FileList(): JSX.Element {
                       <span className="text-[11px] truncate shrink min-w-0">
                         {file.trackTitle || file.fileName}
                       </span>
+                      {analyzingFeatureIds.has(file.id) ? (
+                        <span className="shrink-0 text-[10px] text-accent animate-pulse" title="Estimating audio features…">≈…</span>
+                      ) : file.audioFeaturesEstimated ? (
+                        <span className="shrink-0 text-[10px] text-accent/70" title="Audio features estimated locally (not in the MFB catalogue)">≈</span>
+                      ) : null}
                       {file.bandcampUrl && (
                         <button
                           type="button"
@@ -1027,6 +1036,22 @@ export function FileList(): JSX.Element {
                 >
                   Show in Folder
                 </button>
+                {(() => {
+                  const cf = allFiles.find((f) => f.id === contextMenu.fileId)
+                  // Only offer for files without real MFB features.
+                  if (!cf || (cf.audioFeatures && !cf.audioFeaturesEstimated)) return null
+                  const busy = analyzingFeatureIds.has(cf.id)
+                  return (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className="w-full text-left px-3 py-1.5 text-gray-300 hover:bg-surface-hover transition-colors disabled:opacity-50"
+                      onClick={() => { analyzeFileFeatures(cf.id); setContextMenu(null) }}
+                    >
+                      {busy ? 'Estimating audio features…' : cf.audioFeaturesEstimated ? 'Re-estimate audio features' : 'Estimate audio features'}
+                    </button>
+                  )
+                })()}
                 <div className="mx-2 my-1 h-px bg-surface-border" />
               </>
             )}

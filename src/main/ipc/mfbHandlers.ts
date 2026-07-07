@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { get } from 'https'
+import { get, request } from 'https'
 import { loadToken } from './authHandlers'
 
 const BASE = 'https://musicforbreathwork.com/api'
@@ -26,16 +26,84 @@ function fetchJson<T>(url: string, token?: string | null): Promise<T> {
       res.on('data', (c: Buffer) => chunks.push(c))
       res.on('end', () => {
         try {
-          const body = JSON.parse(Buffer.concat(chunks).toString('utf-8'))
-          if ((res.statusCode ?? 0) >= 400) {
-            reject(new Error(res.statusCode === 401 ? 'NOT_AUTHENTICATED' : `HTTP ${res.statusCode}`))
+          const raw = Buffer.concat(chunks).toString('utf-8')
+          const status = res.statusCode ?? 0
+          if (status >= 400) {
+            const retryAfter = res.headers['retry-after']
+            const err = new Error(status === 401 ? 'NOT_AUTHENTICATED' : `HTTP ${status}`) as Error & {
+              status?: number; retryAfter?: number
+            }
+            err.status = status
+            if (retryAfter) err.retryAfter = Number(retryAfter)
+            reject(err)
           } else {
-            resolve(body as T)
+            resolve(JSON.parse(raw) as T)
           }
         } catch (e) { reject(new Error(`JSON parse error: ${e}`)) }
       })
       res.on('error', reject)
     }).on('error', reject)
+  })
+}
+
+/**
+ * Retry a request once on a 429, honoring the server's Retry-After (capped).
+ * The MFB API rate-limits per user across all endpoints, so a burst of
+ * background reads can briefly starve an interactive call.
+ */
+async function withRetry429<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn()
+  } catch (err) {
+    const e = err as Error & { status?: number; retryAfter?: number }
+    if (e.status !== 429) throw err
+    const waitMs = Math.min((e.retryAfter || 2) * 1000, 20000)
+    console.warn(`[mfb] 429 — retrying in ${waitMs}ms`)
+    await new Promise((r) => setTimeout(r, waitMs))
+    return fn()
+  }
+}
+
+function postJson<T>(url: string, body: unknown, token?: string | null): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const payload = Buffer.from(JSON.stringify(body), 'utf-8')
+    const u = new URL(url)
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'Content-Length': String(payload.byteLength),
+      'User-Agent': 'LiminaLibrary/1.0',
+    }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    const req = request(
+      { method: 'POST', hostname: u.hostname, path: u.pathname + u.search, headers },
+      (res) => {
+        const chunks: Buffer[] = []
+        res.on('data', (c: Buffer) => chunks.push(c))
+        res.on('end', () => {
+          try {
+            const raw = Buffer.concat(chunks).toString('utf-8')
+            const status = res.statusCode ?? 0
+            if (status >= 400) {
+              const retryAfter = res.headers['retry-after']
+              const detail = `${raw.slice(0, 300)}${retryAfter ? ` (Retry-After: ${retryAfter})` : ''}`
+              const err = new Error(status === 401 ? 'NOT_AUTHENTICATED' : `HTTP ${status}: ${detail}`) as Error & {
+                status?: number; retryAfter?: number
+              }
+              err.status = status
+              if (retryAfter) err.retryAfter = Number(retryAfter)
+              reject(err)
+            } else {
+              resolve((raw ? JSON.parse(raw) : {}) as T)
+            }
+          } catch (e) { reject(new Error(`JSON parse error: ${e}`)) }
+        })
+        res.on('error', reject)
+      }
+    )
+    req.on('error', reject)
+    req.write(payload)
+    req.end()
   })
 }
 
@@ -173,7 +241,7 @@ export function registerMfbHandlers(): void {
   ipcMain.handle('mfb:getTrack', async (_, id: number) => {
     const token = await loadToken()
     if (!token) throw new Error('NOT_AUTHENTICATED')
-    return fetchJson(`${BASE}/tracks/${id}`, token)
+    return withRetry429(() => fetchJson(`${BASE}/tracks/${id}`, token))
   })
 
   ipcMain.handle('mfb:matchTracks', async (_, entries: MatchEntry[]) => {
@@ -249,6 +317,43 @@ export function registerMfbHandlers(): void {
       .sort((a, b) => b.score - a.score)
       .slice(0, 8)
   })
+
+  // Match a local file against Spotify (server-side) and mint it as a private,
+  // user-owned catalogue track it can inherit real features from. Returns the
+  // new/existing track id, or { id: null, reason } when there's no confident
+  // duration-matched Spotify result (client falls back to its local estimate).
+  // Free-text Spotify search (server-side), returning candidates in Spotify's
+  // own relevance order for the user to pick from.
+  ipcMain.handle('spotify:search', async (_, q: string) => {
+    const token = await loadToken()
+    if (!token) throw new Error('NOT_AUTHENTICATED')
+    return withRetry429(() =>
+      fetchJson<{
+        candidates: { spotify_id: string; title: string; artist: string; album: string; image_url: string | null; duration: number | null }[]
+        error?: string
+      }>(`${BASE}/tracks/spotify-search?q=${encodeURIComponent(q)}`, token)
+    )
+  })
+
+  ipcMain.handle(
+    'spotify:import',
+    async (_, entry: { spotify_id?: string; title?: string; artist?: string; album?: string; duration?: number }) => {
+      const token = await loadToken()
+      if (!token) throw new Error('NOT_AUTHENTICATED')
+      try {
+        return await withRetry429(() =>
+          postJson<{ id: number | null; spotify_id?: string; enriching?: boolean; reason?: string }>(
+            `${BASE}/tracks/import-from-spotify`,
+            entry,
+            token
+          )
+        )
+      } catch (err) {
+        console.error('[spotify:import] request error:', err instanceof Error ? err.message : err)
+        throw err
+      }
+    }
+  )
 
   ipcMain.handle('mfb:clearCatalogue', () => {
     catalogueCache = null

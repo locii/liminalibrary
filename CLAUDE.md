@@ -73,6 +73,8 @@ All renderer↔main communication goes through `window.electronAPI` (defined in 
 | `mfb:matchTracks` | R→M | mfbHandlers | Batch audio fingerprint matching |
 | `mfb:rankMatches` | R→M | mfbHandlers | Rank candidates for one file |
 | `mfb:clearCatalogue` | R→M | mfbHandlers | Reset MFB index state |
+| `spotify:search` | R→M | mfbHandlers | Free-text Spotify search (via MFB), returns pickable candidates |
+| `spotify:import` | R→M | mfbHandlers | Import a chosen/auto-matched Spotify track as a private user-owned track |
 | `auth:login` | R→M | authHandlers | MFB user login |
 | `auth:logout` | R→M | authHandlers | MFB user logout |
 | `auth:me` | R→M | authHandlers | Fetch current user |
@@ -122,7 +124,7 @@ All state lives in a single `useLibraryStore` (Zustand). No separate server stat
 
 The MFB API lives in `../music-for-breathwork-2`. Key points for this integration:
 
-**Track visibility** — `Track` model has a `trackReviewFilter` global scope. Public (unauthenticated) requests only see `track_review = 0 AND catalog_visible = true`. The four track endpoints (`GET /tracks`, `GET /tracks/search`, `POST /tracks/match`, `GET /tracks/{id}`) have **no `auth:sanctum` middleware** — they always run as unauthenticated, so only public catalogue tracks are visible. Private/under-review tracks are intentionally excluded from Library, even for admins. Admins can see private tracks on the website but Library is a user-facing tool and should only surface the public catalogue. If a file can't be matched it's because the MFB track isn't public yet.
+**Track visibility** — `Track` model has a `trackReviewFilter` global scope. The track endpoints (`GET /tracks`, `GET /tracks/search`, `POST /tracks/match`, `GET /tracks/{id}`, `POST /tracks/import-from-spotify`) run **inside the `auth:sanctum` group** (`routes/api.php`), so they execute as the authenticated Limina user. The scope resolves visibility per request: unauthenticated → `track_review = 0 AND catalog_visible = true` (public only); a regular user → their **own tracks (any review status)** OR public tracks; admin/Curator → all tracks. So a user always sees the public catalogue *plus* the private tracks they themselves own — and never anyone else's private tracks. If a public track can't be matched it's because the MFB track isn't public yet; a user's own imported private tracks (see below) are always visible to them.
 
 **Local catalogue cache** (`mfbHandlers.ts`) — `getCatalogue()` fetches `GET /api/tracks` once per hour and caches it in-memory. The cache is keyed on auth state; logging in or out busts it. `mfb:clearCatalogue` resets it immediately (called at the end of each indexing run in `App.tsx`). If a newly added track isn't appearing in search, clear the catalogue cache.
 
@@ -135,6 +137,10 @@ The MFB API lives in `../music-for-breathwork-2`. Key points for this integratio
 - `GET  /api/tracks/search?q=&limit=` — DB LIKE search, returns id/title/artists/album
 - `POST /api/tracks/match` — batch match up to 50 entries, returns full track + confidence
 - `GET  /api/tracks/{id}` — full track detail incl. tags, audio_features, streaming
+- `GET  /api/tracks/spotify-search?q=&limit=` — free-text Spotify search in Spotify's own relevance order; returns `{candidates: [{spotify_id, title, artist, album, image_url, duration}]}`. Used by the Limina import picker (auto duration-matching can't disambiguate similar tracks by one artist).
+- `POST /api/tracks/import-from-spotify` — import a Spotify track as a **private** catalogue track owned by the caller, enriched synchronously (Reccobeats-by-ID). Body: `{spotify_id}` (from the picker — preferred) OR `{title, artist?, album?, duration}` (auto duration-match fallback). Returns `{id, spotify_id, enriching}` or `{id: null, reason}` (`no_spotify_match` / `exists_private`). Client hydrates via `GET /tracks/{id}`.
+
+**Spotify import flow** — lets a user enrich non-catalogue files (commercial music they own) with real catalogue-scale data. All Spotify/Reccobeats calls happen server-side on MFB (credentials never ship in Limina). Track is created `track_review = 0, catalog_visible = false` (creator-only, *not* in the public review queue) with `user_id` = first submitter (dedup on `track_id`, no dupes — first submitter keeps credit). The user can later opt to list it publicly via the normal review flow. Falls back to Limina's local `featureScan` estimate when there's no confident Spotify/duration match.
 
 ---
 

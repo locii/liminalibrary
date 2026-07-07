@@ -36,6 +36,8 @@ function normalizeImportedFile(f: Catalogue['files'][number]): LibraryFile {
     mfbApplied: f.mfbApplied ?? false,
     mfbMatchRejected: f.mfbMatchRejected ?? false,
     audioFeatures: f.audioFeatures ?? null,
+    audioFeaturesEstimated: f.audioFeaturesEstimated ?? false,
+    featuresAnalyzed: f.featuresAnalyzed ?? false,
     bandcampUrl: f.bandcampUrl ?? null,
     beatportUrl: f.beatportUrl ?? null,
     appleMusicUrl: f.appleMusicUrl ?? null,
@@ -235,6 +237,9 @@ interface LibraryState {
   /** Progress of the manual/background cue-point scan. */
   cueScan: { running: boolean; done: number; total: number }
   setCueScan: (p: { running: boolean; done: number; total: number }) => void
+  /** Progress of the background audio-feature scan (Reccobeats). */
+  featureScan: { running: boolean; done: number; total: number }
+  setFeatureScan: (p: { running: boolean; done: number; total: number }) => void
   /** Live playback state pushed from the persistent mix engine. */
   mixPlayback: MixEngineState
   setMixPlayback: (s: MixEngineState) => void
@@ -518,6 +523,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   setRecording: (r) => set({ recording: r }),
   cueScan: { running: false, done: 0, total: 0 },
   setCueScan: (p) => set({ cueScan: p }),
+  featureScan: { running: false, done: 0, total: 0 },
+  setFeatureScan: (p) => set({ featureScan: p }),
   mixPlayback: { playing: false, current: null, currentTime: 0, duration: 0, fading: false, outgoing: null, fadeElapsedMs: 0, fadeDurationMs: 0 },
   setMixPlayback: (s) => set({ mixPlayback: s }),
 
@@ -545,7 +552,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
               mfbApplied: true,
               appliedPathGuess: true,
               albumImageUrl: match.album.image_url ?? null,
-              audioFeatures: match.audio_features ?? null,
+              // Real MFB features win; otherwise keep any local estimate rather than wiping it.
+              audioFeatures: match.audio_features ?? f.audioFeatures,
+              audioFeaturesEstimated: match.audio_features ? false : f.audioFeaturesEstimated,
               bandcampUrl: match.bandcamp_url ?? null,
               beatportUrl: match.beatport_url ?? null,
               appleMusicUrl: match.apple_music_url ?? null,
@@ -577,7 +586,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         ...f, artist, album: match.album?.title ?? '', tags, notes: match.description ?? '',
         trackTitle: match.title, mfbTrackId: match.id, mfbApplied: true, appliedPathGuess: true,
         albumImageUrl: match.album.image_url ?? null,
-        audioFeatures: match.audio_features ?? null,
+        // Real MFB features win; otherwise keep any local estimate rather than wiping it.
+        audioFeatures: match.audio_features ?? f.audioFeatures,
+        audioFeaturesEstimated: match.audio_features ? false : f.audioFeaturesEstimated,
         bandcampUrl: match.bandcamp_url ?? null,
         beatportUrl: match.beatport_url ?? null,
         appleMusicUrl: match.apple_music_url ?? null,

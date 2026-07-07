@@ -20,6 +20,8 @@ const api: LibraryAPI = {
     ipcRenderer.invoke('audio:getFileDuration', filePath),
   analyzeCues: (filePath) =>
     ipcRenderer.invoke('audio:analyzeCues', filePath),
+  analyzeFeatures: (filePath, durationSec) =>
+    ipcRenderer.invoke('audio:analyzeFeatures', filePath, durationSec),
 
   getAudioServerPort: () => ipcRenderer.invoke('audio:getServerPort'),
 
@@ -34,6 +36,8 @@ const api: LibraryAPI = {
   mfbMatchTracks: (entries) => ipcRenderer.invoke('mfb:matchTracks', entries),
   mfbRankMatches: (entry) => ipcRenderer.invoke('mfb:rankMatches', entry),
   mfbClearCatalogue: () => ipcRenderer.invoke('mfb:clearCatalogue'),
+  spotifySearch: (q) => ipcRenderer.invoke('spotify:search', q),
+  spotifyImport: (entry) => ipcRenderer.invoke('spotify:import', entry),
 
   authLogin: (email, password) => ipcRenderer.invoke('auth:login', email, password),
   authLogout: () => ipcRenderer.invoke('auth:logout'),
