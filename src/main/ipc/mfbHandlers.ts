@@ -10,6 +10,7 @@ interface CatalogueTrack {
   artist: string
   album: string
   slug?: string
+  updated_at?: string | null
 }
 
 let catalogueCache: CatalogueTrack[] | null = null
@@ -359,5 +360,14 @@ export function registerMfbHandlers(): void {
     catalogueCache = null
     catalogueCacheTime = 0
     catalogueCacheAuthed = false
+  })
+
+  // Lightweight change-map for the renderer's incremental MFB resync:
+  // { trackId: updated_at }. Reuses the hourly catalogue cache (no extra fetch).
+  ipcMain.handle('mfb:getUpdatedMap', async () => {
+    const catalogue = await getCatalogue()
+    const map: Record<number, string> = {}
+    for (const t of catalogue) if (t.updated_at) map[t.id] = t.updated_at
+    return map
   })
 }

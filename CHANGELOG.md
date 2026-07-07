@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.3.0 — Always up to date
+
+Your matched library now keeps itself current with Music for Breathwork, and Session Mode gains a couple of quality-of-life touches.
+
+- **Automatic catalogue sync** — Matched tracks refresh their audio features and tags from Music for Breathwork in the background, so when the catalogue is re-analysed online those updates flow through to your library. A **Syncing** indicator shows progress — click it to see exactly which tracks are updating, and Cancel anytime.
+- **Your own tags are kept** — Tags you add yourself are preserved through every sync; only the catalogue's own tags are updated, added, or removed.
+- **Rescan the whole library** — **Rescan Audio Features** now refreshes matched tracks from the catalogue *and* re-estimates features for everything else, in one cancellable action.
+- **Inspect any track in Session Mode** — Click the ⓘ on a track in the Available pool to open its full details — audio features, tags, artwork — right beside your mix.
+- **Clear the current track** — A new ✕ in Now Playing clears what's loaded.
+
 ## v2.2.0 — Enrich your own tracks
 
 Bring Music for Breathwork's track data and audio features to music that isn't in the catalogue yet, so your whole library can drive Session Mode — not just matched tracks.

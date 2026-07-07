@@ -5,6 +5,7 @@ import { FolderPanel } from './components/FolderPanel'
 import { FileList } from './components/FileList'
 import { PropertiesPanel } from './components/PropertiesPanel'
 import { IndexingLog } from './components/IndexingLog'
+import { SyncLog } from './components/SyncLog'
 import { AccountButton } from './components/AccountButton'
 import { MissingTrackPanel } from './components/MissingTrackPanel'
 import { PlaylistPanel } from './components/PlaylistPanel'
@@ -19,6 +20,7 @@ import { WhatsNewModal } from './components/WhatsNewModal'
 import { loadSettings, saveSettings, applySettings } from './lib/settings'
 import type { AppSettings } from './lib/settings'
 import { syncLibraryToMfb } from './lib/syncLibrary'
+import { runMfbRefresh, cancelMfbRefresh } from './lib/mfbSync'
 import { runCueScan } from './lib/cueScan'
 import { runFeatureScan, cancelFeatureScan } from './lib/featureScan'
 import { useUpdaterStore } from './store/updaterStore'
@@ -56,8 +58,12 @@ export default function App(): JSX.Element {
   const userAccount = useLibraryStore((s) => s.userAccount)
 
   const featureScan = useLibraryStore((s) => s.featureScan)
+  const mfbRefresh = useLibraryStore((s) => s.mfbRefresh)
+  // The two halves of a full audio-features rescan (MFB resync + Reccobeats scan).
+  const rescanBusy = featureScan.running || mfbRefresh.running
   const [indexing, setIndexing] = useState(false)
   const [showLog, setShowLog] = useState(false)
+  const [showSyncLog, setShowSyncLog] = useState(false)
   const selectFile = useLibraryStore((s) => s.selectFile)
   const indexTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const cancelledRef = useRef(false)
@@ -181,6 +187,10 @@ export default function App(): JSX.Element {
     if (userAccount && catalogueLoaded && !syncReadyRef.current) {
       syncReadyRef.current = true
       syncLibraryToMfb()
+      // Silently resync audio features + system tags for matched tracks against
+      // the live MFB catalogue. Deferred so it doesn't compete with the initial
+      // match/index pass for the API. Self-guards on auth; runs once per session.
+      setTimeout(() => { runMfbRefresh() }, 8000)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userAccount, catalogueLoaded])
@@ -399,18 +409,27 @@ export default function App(): JSX.Element {
       {hasContent && (
         <button
           type="button"
-          onClick={() => featureScan.running ? cancelFeatureScan() : runFeatureScan({ force: true })}
+          onClick={() => {
+            // Treat the two halves as one operation: if either is already
+            // running, this is a Stop (cancel both) — never stack a second pass.
+            if (rescanBusy) { cancelFeatureScan(); cancelMfbRefresh(); return }
+            // Rescan the whole library: pull fresh features (+ tags) from MFB for
+            // every matched track (force, not just the changed ones), and estimate
+            // features via Reccobeats for the rest.
+            runMfbRefresh({ force: true })
+            runFeatureScan({ force: true })
+          }}
           className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-gray-300 hover:bg-surface-hover hover:text-gray-100 transition-colors"
-          title={featureScan.running ? 'Stop estimating audio features' : 'Re-estimate audio features for all non-catalogue tracks via a 30s clip sent to Reccobeats'}
+          title={rescanBusy ? 'Stop the audio-features rescan' : 'Refresh audio features for the whole library — from MFB for matched tracks, and a Reccobeats estimate (30s clip) for non-catalogue tracks'}
         >
-          {featureScan.running ? (
+          {rescanBusy ? (
             <svg className="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="currentColor"><rect x="3" y="3" width="6" height="6" rx="1" /></svg>
           ) : (
             <svg className="w-3 h-3 shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round">
               <path d="M1 6h1.5M9.5 6H11M3.5 3.5v5M6 1.5v9M8.5 3.5v5" />
             </svg>
           )}
-          {featureScan.running ? `Stop estimating… ${featureScan.done}/${featureScan.total}` : 'Rescan Audio Features'}
+          {rescanBusy ? `Stop rescan… ${featureScan.done + mfbRefresh.done}/${featureScan.total + mfbRefresh.total}` : 'Rescan Audio Features'}
         </button>
       )}
       <div className="my-1 border-t border-surface-border" />
@@ -448,7 +467,7 @@ export default function App(): JSX.Element {
           <button
             type="button"
             onClick={() => setRestoredFromBackup(false)}
-            className="ml-4 opacity-60 hover:opacity-100 transition-opacity"
+            className="ml-4 transition-opacity opacity-60 hover:opacity-100"
             aria-label="Dismiss"
           >
             <svg className="w-3 h-3" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
@@ -459,7 +478,7 @@ export default function App(): JSX.Element {
       )}
 
       {/* Top bar */}
-      <div className="flex justify-between items-center px-4 h-10 border-b shrink-0 bg-surface-panel border-surface-border">
+      <div className="flex items-center justify-between h-10 px-4 border-b shrink-0 bg-surface-panel border-surface-border">
         <button
           type="button"
           onClick={() => setShowWelcome((v) => !v)}
@@ -468,7 +487,7 @@ export default function App(): JSX.Element {
         >
           Limina Library
         </button>
-        <div className="flex gap-2 items-center">
+        <div className="flex items-center gap-2">
           <MixMiniPlayer />
           {indexing && (
             <div className="flex items-center gap-1.5">
@@ -488,6 +507,30 @@ export default function App(): JSX.Element {
               <button
                 type="button"
                 onClick={cancelIndexing}
+                className="text-[10px] text-gray-600 hover:text-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          {!indexing && mfbRefresh.running && (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowSyncLog(true)}
+                className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+                title="View which tracks are being synced from Music for Breathwork"
+              >
+                <svg className="w-2.5 h-2.5 animate-spin text-gray-600" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M6 1v2M6 9v2M1 6h2M9 6h2" strokeLinecap="round" />
+                  <path d="M2.5 2.5l1.4 1.4M8.1 8.1l1.4 1.4M9.5 2.5L8.1 3.9M3.9 8.1L2.5 9.5" strokeLinecap="round" opacity="0.4" />
+                </svg>
+                <span className="text-[10px] text-gray-600">Syncing{mfbRefresh.total > 0 ? ` ${mfbRefresh.done}/${mfbRefresh.total}` : ''}</span>
+              </button>
+              <span className="text-[10px] text-gray-700">·</span>
+              <button
+                type="button"
+                onClick={() => cancelMfbRefresh()}
                 className="text-[10px] text-gray-600 hover:text-gray-300 transition-colors"
               >
                 Cancel
@@ -525,7 +568,7 @@ export default function App(): JSX.Element {
             type="button"
             onClick={() => setShowSettings(true)}
             title="Settings"
-            className="flex justify-center items-center w-6 h-6 text-gray-400 rounded border transition-colors bg-surface-hover hover:bg-surface-border border-surface-border"
+            className="flex items-center justify-center w-6 h-6 text-gray-400 transition-colors border rounded bg-surface-hover hover:bg-surface-border border-surface-border"
           >
             <svg className="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="7" cy="7" r="1.75" />
@@ -536,7 +579,7 @@ export default function App(): JSX.Element {
             type="button"
             onClick={() => setTourOpen(true)}
             title="Start guided tour"
-            className="flex justify-center items-center w-6 h-6 text-xs text-gray-300 rounded border transition-colors bg-surface-hover hover:bg-surface-border border-surface-border"
+            className="flex items-center justify-center w-6 h-6 text-xs text-gray-300 transition-colors border rounded bg-surface-hover hover:bg-surface-border border-surface-border"
           >
             ?
           </button>
@@ -544,9 +587,9 @@ export default function App(): JSX.Element {
       </div>
 
       {showBackups && (
-        <div className="flex fixed inset-0 z-50 justify-center items-center bg-black/60" onClick={() => setShowBackups(false)}>
-          <div className="flex flex-col gap-3 p-4 w-80 rounded-lg border shadow-xl border-surface-border bg-surface-panel" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowBackups(false)}>
+          <div className="flex flex-col gap-3 p-4 border rounded-lg shadow-xl w-80 border-surface-border bg-surface-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold text-gray-200 uppercase tracking-wider">Restore from Backup</span>
               <button type="button" onClick={() => setShowBackups(false)} className="text-gray-600 transition-colors hover:text-gray-400">
                 <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
@@ -595,6 +638,13 @@ export default function App(): JSX.Element {
         />
       )}
 
+      {showSyncLog && (
+        <SyncLog
+          onClose={() => setShowSyncLog(false)}
+          onSelectFile={(id) => { selectFile(id); setShowSyncLog(false) }}
+        />
+      )}
+
       {showReindexDialog && (
         <ReindexDialog
           onClose={() => setShowReindexDialog(false)}
@@ -611,10 +661,10 @@ export default function App(): JSX.Element {
         <div className="flex flex-col flex-1 min-h-0">
           <div className="flex flex-1 min-h-0">
             {!mixMode && <FolderPanel onAddFolder={handleAddFolder} onRescan={handleRescan} />}
-            <div className="flex flex-1 min-h-0 min-w-0">
+            <div className="flex flex-1 min-w-0 min-h-0">
               {mixMode ? <MixPanel /> : playlistTrackQuery ? <PlaylistTrackSearch /> : selectedPlaylistId !== null ? <PlaylistPanel /> : <FileList />}
               {!mixMode && (selectedFileId || selectedMissingTrackId) && (
-                <div className="w-96 border-l shrink-0 border-surface-border">
+                <div className="border-l w-96 shrink-0 border-surface-border">
                   {selectedFileId ? <PropertiesPanel /> : <MissingTrackPanel key={selectedMissingTrackId} />}
                 </div>
               )}
@@ -667,7 +717,7 @@ function LoginFlash({ name, onDismiss }: { name: string; onDismiss: () => void }
   return (
     <div className="flex items-center justify-between px-4 py-2 bg-accent/15 border-b border-accent/30 text-[11px] text-accent shrink-0">
       <span>Signed in as {name}</span>
-      <button type="button" onClick={onDismiss} className="ml-4 opacity-60 hover:opacity-100 transition-opacity" aria-label="Dismiss">
+      <button type="button" onClick={onDismiss} className="ml-4 transition-opacity opacity-60 hover:opacity-100" aria-label="Dismiss">
         <svg className="w-3 h-3" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
           <path d="M2 2l6 6M8 2l-6 6" />
         </svg>
@@ -705,8 +755,8 @@ function WelcomeScreen({ onAddFolder, hasContent, onClose }: {
   ]
 
   return (
-    <div className="flex overflow-y-auto flex-col flex-1">
-      <div className="flex flex-col gap-8 items-center px-8 py-12 mx-auto w-full max-w-xl">
+    <div className="flex flex-col flex-1 overflow-y-auto">
+      <div className="flex flex-col items-center w-full max-w-xl gap-8 px-8 py-12 mx-auto">
 
         {/* Close button when shown as overlay */}
         {onClose && (
@@ -722,7 +772,7 @@ function WelcomeScreen({ onAddFolder, hasContent, onClose }: {
         )}
 
         {/* Identity */}
-        <div className="flex flex-col gap-3 items-center text-center">
+        <div className="flex flex-col items-center gap-3 text-center">
           <img src={libraryLogo} alt="Limina Library" className="object-contain w-40 h-40 rounded-2xl" />
           <div>
             <h1 className="text-base font-semibold tracking-wide text-gray-100">Limina Library</h1>
@@ -735,10 +785,10 @@ function WelcomeScreen({ onAddFolder, hasContent, onClose }: {
         </div>
 
         {/* Features */}
-        <div className="flex flex-col gap-3 w-full">
+        <div className="flex flex-col w-full gap-3">
           {features.map((f) => (
             <div key={f.label} className="flex flex-col gap-1.5 p-3 rounded-lg border border-surface-border bg-surface-panel">
-              <div className="flex gap-2 items-center">
+              <div className="flex items-center gap-2">
                 <svg className="w-3.5 h-3.5 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   {f.icon}
                 </svg>
@@ -753,7 +803,7 @@ function WelcomeScreen({ onAddFolder, hasContent, onClose }: {
         {!hasContent && (
           <button
             onClick={onAddFolder}
-            className="flex gap-2 items-center px-5 py-2 text-xs font-medium text-white rounded transition-colors bg-accent hover:bg-accent/80"
+            className="flex items-center gap-2 px-5 py-2 text-xs font-medium text-white transition-colors rounded bg-accent hover:bg-accent/80"
           >
             <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
               <path d="M6 2v8M2 6h8" />
@@ -763,7 +813,7 @@ function WelcomeScreen({ onAddFolder, hasContent, onClose }: {
         )}
 
         {/* Footer */}
-        <div className="flex flex-col gap-2 items-center pt-6 w-full text-center border-t border-surface-border">
+        <div className="flex flex-col items-center w-full gap-2 pt-6 text-center border-t border-surface-border">
           <div className="flex gap-4">
             <button
               type="button"

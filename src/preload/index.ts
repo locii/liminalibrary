@@ -36,6 +36,7 @@ const api: LibraryAPI = {
   mfbMatchTracks: (entries) => ipcRenderer.invoke('mfb:matchTracks', entries),
   mfbRankMatches: (entry) => ipcRenderer.invoke('mfb:rankMatches', entry),
   mfbClearCatalogue: () => ipcRenderer.invoke('mfb:clearCatalogue'),
+  mfbGetUpdatedMap: () => ipcRenderer.invoke('mfb:getUpdatedMap'),
   spotifySearch: (q) => ipcRenderer.invoke('spotify:search', q),
   spotifyImport: (entry) => ipcRenderer.invoke('spotify:import', entry),
 

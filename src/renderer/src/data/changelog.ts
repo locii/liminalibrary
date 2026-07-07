@@ -10,6 +10,36 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2.3.0',
+    date: 'July 2026',
+    sections: [
+      {
+        icon: '↻',
+        title: 'Always up to date',
+        items: [
+          'Matched tracks refresh their audio features and tags from Music for Breathwork in the background — catalogue updates online flow through to your library',
+          'A Syncing indicator shows progress; click it to see exactly which tracks are updating, and Cancel anytime',
+          'Tags you add yourself are preserved through every sync — only the catalogue\'s own tags are updated, added, or removed',
+        ],
+      },
+      {
+        icon: '✧',
+        title: 'Session Mode',
+        items: [
+          'Click the ⓘ on a track in the Available pool to open its full details — audio features, tags, artwork — right beside your mix',
+          'A new ✕ in Now Playing clears the current track',
+        ],
+      },
+      {
+        icon: '≡',
+        title: 'Library',
+        items: [
+          'Rescan Audio Features now refreshes matched tracks from the catalogue and re-estimates features for everything else, in one cancellable action',
+        ],
+      },
+    ],
+  },
+  {
     version: '2.0.0',
     date: 'July 2026',
     sections: [

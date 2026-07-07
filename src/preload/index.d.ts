@@ -76,6 +76,7 @@ export interface LibraryAPI {
   mfbMatchTracks: (entries: MfbMatchEntry[]) => Promise<MfbMatchResult[]>
   mfbRankMatches: (entry: MfbMatchEntry) => Promise<MfbRankResult[]>
   mfbClearCatalogue: () => Promise<void>
+  mfbGetUpdatedMap: () => Promise<Record<number, string>>
   spotifySearch: (q: string) => Promise<{ candidates: SpotifySearchCandidate[]; error?: string }>
   spotifyImport: (entry: SpotifyImportEntry) => Promise<SpotifyImportResult>
 

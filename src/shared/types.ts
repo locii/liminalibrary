@@ -71,6 +71,14 @@ export interface LibraryFile {
   format: string       // 'wav' | 'mp3' | 'flac' | 'aiff' | 'm4a'
   fileSize: number     // bytes
   tags: string[]
+  /** Subset of `tags` that came from MFB (the "system" tags). Everything in
+   *  `tags` not listed here is a user-added tag and is preserved across MFB
+   *  syncs. Undefined on legacy files (treated as "all current tags are MFB"). */
+  mfbTags?: string[]
+  /** The MFB track's `updated_at` value as of the last successful resync. The
+   *  incremental resync re-fetches a track only when the catalogue's current
+   *  `updated_at` differs from this. Undefined until first synced. */
+  mfbSyncedAt?: string
   rating: number       // 0–5
   notes: string
   breathworkPhase: BreathworkPhase | null

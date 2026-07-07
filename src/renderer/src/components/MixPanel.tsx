@@ -4,6 +4,7 @@ import { MixVisualizer, MixVizCanvas } from './MixVisualizer'
 import { MixCueEditorModal } from './MixCueEditorModal'
 import { SessionsModal } from './SessionsModal'
 import { SaveSessionModal } from './SaveSessionModal'
+import { PropertiesPanel } from './PropertiesPanel'
 import { GuidedTour } from './GuidedTour'
 import { SESSION_STEPS, PRO_TOUR_STEP_IDS } from './sessionTourSteps'
 import { startRecording, stopRecording, cancelRecording } from '../lib/sessionRecorder'
@@ -45,6 +46,8 @@ export function MixPanel(): JSX.Element {
   const clearMixTags = useLibraryStore((s) => s.clearMixTags)
   const setMixMatchMode = useLibraryStore((s) => s.setMixMatchMode)
   const exitMixMode = useLibraryStore((s) => s.exitMixMode)
+  const selectFile = useLibraryStore((s) => s.selectFile)
+  const selectedFileId = useLibraryStore((s) => s.selectedFileId)
   const updateFile = useLibraryStore((s) => s.updateFile)
   const mixFadeIns = useLibraryStore((s) => s.mixFadeIns)
   const mixFadeMs = useLibraryStore((s) => s.mixFadeMs)
@@ -635,6 +638,13 @@ export function MixPanel(): JSX.Element {
                   </svg>
                 </button>
               )}
+              {cur && (
+                <button type="button" onClick={() => eng()?.stop()}
+                  className="flex items-center justify-center w-5 h-5 text-gray-500 transition-colors rounded shrink-0 hover:text-red-400 hover:bg-red-500/10"
+                  title="Clear the current track">
+                  <svg className="w-3 h-3" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 2l6 6M8 2l-6 6" /></svg>
+                </button>
+              )}
             </div>
 
             <canvas
@@ -745,7 +755,13 @@ export function MixPanel(): JSX.Element {
           </div>
         </div>
 
-        {/* RIGHT: filters + available pool */}
+        {/* RIGHT: available pool — swapped for the track properties panel while
+            inspecting a track (info icon on a pool row), so it stays two columns. */}
+        {selectedFileId ? (
+          <div className="flex flex-col min-h-0 w-96 shrink-0">
+            <PropertiesPanel />
+          </div>
+        ) : (
         <div className="flex flex-col min-h-0 border-l w-96 shrink-0 border-surface-border">
           {/* Tag + feel + playlist controls */}
           <div data-tour="session-tags" className="px-3 py-3 border-b shrink-0 border-surface-border">
@@ -887,10 +903,11 @@ export function MixPanel(): JSX.Element {
             {filteredPool.length === 0 ? (
               <p className="px-4 py-6 text-[11px] text-gray-600 text-center">{pool.length === 0 ? 'No tracks match these tags.' : `No tracks match “${poolQuery}”.`}</p>
             ) : (
-              <PoolList items={visiblePool} selectedId={selectedId} previewFileId={previewFileId} onAdd={addQueueTrack} onSelect={setSelectedId} onPreview={setPreview} poolIds={poolIds} />
+              <PoolList items={visiblePool} selectedId={selectedId} infoId={selectedFileId} previewFileId={previewFileId} onAdd={addQueueTrack} onSelect={setSelectedId} onInfo={selectFile} onPreview={setPreview} poolIds={poolIds} />
             )}
           </div>
         </div>
+        )}
       </div>
 
       {selected && (
@@ -970,12 +987,14 @@ function PreviewIconButton({ onClick }: { onClick: (e: React.MouseEvent) => void
 }
 
 // --- Available pool list ---------------------------------------------------
-const PoolList = memo(function PoolList({ items, selectedId, previewFileId, onAdd, onSelect, onPreview, poolIds }: {
+const PoolList = memo(function PoolList({ items, selectedId, infoId, previewFileId, onAdd, onSelect, onInfo, onPreview, poolIds }: {
   items: { file: LibraryFile; feel: number | null }[]
   selectedId: string | null
+  infoId: string | null
   previewFileId: string | null
   onAdd: (fileId: string) => void
   onSelect: (id: string) => void
+  onInfo: (id: string | null) => void
   onPreview: (fileId: string | null, queue: string[]) => void
   poolIds: string[]
 }): JSX.Element {
@@ -983,11 +1002,12 @@ const PoolList = memo(function PoolList({ items, selectedId, previewFileId, onAd
     <>
       {items.map(({ file: f, feel }) => {
         const isPreviewing = previewFileId === f.id
+        const isInfo = infoId === f.id
         return (
         <div key={f.id} draggable
           onDoubleClick={() => onAdd(f.id)}
           onDragStart={(e) => { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData(MIX_TRACK_DND_TYPE, f.id) }}
-          className={`group flex items-center gap-2 px-3 py-1.5 text-[11px] transition-colors ${selectedId === f.id ? 'bg-accent/10 text-gray-200' : 'text-gray-400 hover:bg-surface-hover'}`}
+          className={`group flex items-center gap-2 px-3 py-1.5 text-[11px] transition-colors ${selectedId === f.id || isInfo ? 'bg-accent/10 text-gray-200' : 'text-gray-400 hover:bg-surface-hover'}`}
           title="Double-click to add to queue">
           <button type="button" onClick={(e) => { e.stopPropagation(); onAdd(f.id) }}
             className="flex items-center justify-center w-4 h-4 text-gray-600 transition-colors rounded shrink-0 hover:text-accent hover:bg-accent/10" title="Add to queue">
@@ -1012,6 +1032,11 @@ const PoolList = memo(function PoolList({ items, selectedId, previewFileId, onAd
             </span>
           )}
           {feel == null && f.artist && <span className="truncate text-gray-600 max-w-[34%]">{f.artist}</span>}
+          <button type="button" onClick={(e) => { e.stopPropagation(); onInfo(isInfo ? null : f.id) }}
+            className={`flex items-center justify-center w-4 h-4 rounded-full border transition-all shrink-0 ${isInfo ? 'opacity-100 border-accent text-accent' : 'text-gray-600 border-transparent opacity-0 group-hover:opacity-100 hover:text-accent'}`}
+            title={isInfo ? 'Hide track details' : 'Show track details'}>
+            <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="5" /><path d="M6 5.2v3" /><circle cx="6" cy="3.4" r="0.5" fill="currentColor" stroke="none" /></svg>
+          </button>
           <PreviewIconButton onClick={(e) => { e.stopPropagation(); onSelect(f.id) }} />
         </div>
         )

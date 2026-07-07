@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { pathGuessUpdatesForApply } from '../lib/libraryTrackDisplay'
 import { useLibraryStore } from '../store/libraryStore'
 import { syncLibraryToMfb } from '../lib/syncLibrary'
+import { mfbTagNames, reconcileTags, hourPhase, hasRealFeatures } from '../lib/mfbTags'
 import { mfbTrackUrl } from '../types'
 import type { MfbAudioFeatures } from '../types'
 import { WaveformPreview } from './WaveformPreview'
@@ -244,26 +245,25 @@ export function PropertiesPanel(): JSX.Element {
     if (!data?.id || !data?.title) return false
     const tagsData = data.tags ?? {}
     const artist = (data.artists ?? []).map((a) => a.name).join(', ')
-    const tags = Object.values(tagsData).flat().map((t) => t.name)
-    const hourSlug = tagsData['Hour']?.[0]?.slug?.en
-    // Only treat features as real if they're actually populated — a track that's
-    // still enriching returns an audio_features object full of nulls, which we
-    // must not apply (it would render broken bars and mark the file as analysed).
+    // Refresh MFB (system) tags while keeping any tags the user added themselves.
+    const { tags, mfbTags } = reconcileTags(file.tags, file.mfbTags, mfbTagNames(tagsData))
+    const phase = hourPhase(tagsData)
+    // Only apply features when populated — a still-enriching track returns nulls.
     const feat = data.audio_features
-    const hasRealFeatures = !!feat && Number.isFinite(feat.energy) && Number.isFinite(feat.intensity)
+    const realFeatures = hasRealFeatures(feat)
     updateFile(file.id, {
-      artist, album: data.album?.title ?? '', tags,
+      artist, album: data.album?.title ?? '', tags, mfbTags,
       notes: data.description ?? '',
       trackTitle: data.title,
       mfbTrackId: data.id,
       mfbApplied: true,
       appliedPathGuess: true,
       albumImageUrl: data.album?.image_url ?? null,
-      audioFeatures: hasRealFeatures ? feat : (file.audioFeatures ?? null),
-      audioFeaturesEstimated: hasRealFeatures ? false : file.audioFeaturesEstimated,
+      audioFeatures: realFeatures ? feat : (file.audioFeatures ?? null),
+      audioFeaturesEstimated: realFeatures ? false : file.audioFeaturesEstimated,
       bandcampUrl: data.streaming?.bandcamp_url ?? null,
       beatportUrl: data.streaming?.beatport_url ?? null,
-      ...(hourSlug ? { breathworkPhase: hourSlug as import('../types').BreathworkPhase } : {}),
+      ...(phase ? { breathworkPhase: phase } : {}),
     })
     return true
   }
@@ -738,7 +738,10 @@ export function PropertiesPanel(): JSX.Element {
               >
                 {tag}
                 <button
-                  onClick={() => updateFile(file.id, { tags: file.tags.filter((t) => t !== tag) })}
+                  onClick={() => updateFile(file.id, {
+                    tags: file.tags.filter((t) => t !== tag),
+                    mfbTags: file.mfbTags?.filter((t) => t !== tag),
+                  })}
                   title={`Remove tag "${tag}"`}
                   className="text-gray-500 hover:text-gray-300"
                 >×</button>

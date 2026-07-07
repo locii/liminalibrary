@@ -1,6 +1,15 @@
 import { create } from 'zustand'
 import type { BreathworkPhase, Catalogue, LibraryFile, MfbMatch, MfbPlaylist, MfbPlaylistDetail, MfbTag, WatchedFolder } from '../types'
 import type { MixEngineState } from '../lib/mixEngine'
+import { reconcileTags } from '../lib/mfbTags'
+
+/** One matched track's status during a background MFB resync pass. */
+export interface MfbRefreshItem {
+  fileId: string
+  fileName: string
+  title: string
+  status: 'queued' | 'syncing' | 'synced' | 'failed'
+}
 
 function normalizeCurve(v: unknown): number {
   if (typeof v === 'number') {
@@ -35,6 +44,8 @@ function normalizeImportedFile(f: Catalogue['files'][number]): LibraryFile {
     mfbIndexed: f.mfbIndexed ?? false,
     mfbApplied: f.mfbApplied ?? false,
     mfbMatchRejected: f.mfbMatchRejected ?? false,
+    mfbTags: f.mfbTags,
+    mfbSyncedAt: f.mfbSyncedAt,
     audioFeatures: f.audioFeatures ?? null,
     audioFeaturesEstimated: f.audioFeaturesEstimated ?? false,
     featuresAnalyzed: f.featuresAnalyzed ?? false,
@@ -240,6 +251,10 @@ interface LibraryState {
   /** Progress of the background audio-feature scan (Reccobeats). */
   featureScan: { running: boolean; done: number; total: number }
   setFeatureScan: (p: { running: boolean; done: number; total: number }) => void
+  /** Progress + per-track log of the background MFB resync (audio features +
+   *  system tags for matched tracks). Drives the "Syncing" pill and its log modal. */
+  mfbRefresh: { running: boolean; done: number; total: number; items: MfbRefreshItem[] }
+  setMfbRefresh: (p: { running: boolean; done: number; total: number; items: MfbRefreshItem[] }) => void
   /** Live playback state pushed from the persistent mix engine. */
   mixPlayback: MixEngineState
   setMixPlayback: (s: MixEngineState) => void
@@ -397,7 +412,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     selectedFileId: null,
     playlistTrackQuery: '',
   }),
-  exitMixMode: () => set({ mixMode: false }),
+  exitMixMode: () => set({ mixMode: false, selectedFileId: null }),
   addMixTag: (tag) => set((s) => (
     s.mixTags.includes(tag) ? {} : { mixTags: [...s.mixTags, tag] }
   )),
@@ -525,6 +540,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   setCueScan: (p) => set({ cueScan: p }),
   featureScan: { running: false, done: 0, total: 0 },
   setFeatureScan: (p) => set({ featureScan: p }),
+  mfbRefresh: { running: false, done: 0, total: 0, items: [] },
+  setMfbRefresh: (p) => set({ mfbRefresh: p }),
   mixPlayback: { playing: false, current: null, currentTime: 0, duration: 0, fading: false, outgoing: null, fadeElapsedMs: 0, fadeDurationMs: 0 },
   setMixPlayback: (s) => set({ mixPlayback: s }),
 
@@ -540,13 +557,13 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     const { [fileId]: _, ...rest } = s.pendingMatches
     const artist = (match.artists ?? []).map((a: { name: string }) => a.name).join(', ')
     const allTags: MfbTag[] = ([] as MfbTag[]).concat(...Object.values(match.tags ?? {}))
-    const tags = allTags.map((t) => t.name)
+    const freshMfbTags = allTags.map((t) => t.name)
     const hourTag = match.tags['Hour']?.[0]
     return {
       pendingMatches: rest,
       files: s.files.map((f) =>
         f.id === fileId
-          ? { ...f, artist, album: match.album.title, tags, notes: match.description ?? '',
+          ? { ...f, artist, album: match.album.title, ...reconcileTags(f.tags, f.mfbTags, freshMfbTags), notes: match.description ?? '',
               trackTitle: match.title,
               mfbTrackId: match.id,
               mfbApplied: true,
@@ -580,10 +597,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       if (!match) return f
       const artist = (match.artists ?? []).map((a: { name: string }) => a.name).join(', ')
       const allTags: MfbTag[] = ([] as MfbTag[]).concat(...Object.values(match.tags ?? {}))
-      const tags = allTags.map((t) => t.name)
+      const freshMfbTags = allTags.map((t) => t.name)
       const hourTag = (match.tags ?? {})['Hour']?.[0]
       return {
-        ...f, artist, album: match.album?.title ?? '', tags, notes: match.description ?? '',
+        ...f, artist, album: match.album?.title ?? '', ...reconcileTags(f.tags, f.mfbTags, freshMfbTags), notes: match.description ?? '',
         trackTitle: match.title, mfbTrackId: match.id, mfbApplied: true, appliedPathGuess: true,
         albumImageUrl: match.album.image_url ?? null,
         // Real MFB features win; otherwise keep any local estimate rather than wiping it.
@@ -610,6 +627,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
             trackTitle: '',
             breathworkPhase: null,
             tags: [],
+            mfbTags: undefined,
+            mfbSyncedAt: undefined,
             audioFeatures: null,
             bandcampUrl: null,
             beatportUrl: null,
@@ -637,6 +656,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       trackTitle: '',
       breathworkPhase: null,
       tags: [],
+      mfbTags: undefined,
+      mfbSyncedAt: undefined,
       audioFeatures: null,
       bandcampUrl: null,
       beatportUrl: null,
