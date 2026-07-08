@@ -21,7 +21,16 @@ export function getMixEngine(): MixEngine {
   // Start at the track's clip-start cue if set, else its Auto-Mix fade-in point.
   e.setStartResolver((f) => f.clipStartMs ?? useLibraryStore.getState().mixFadeIns[f.id] ?? 0)
   e.xfadeMs = useLibraryStore.getState().mixFadeMs
-  e.subscribe((s) => useLibraryStore.getState().setMixPlayback(s))
+  // Push live engine state to the store, and record each track that starts as
+  // "played this session" so generators never pick it again (any entry path:
+  // generator advance, dragged/double-clicked, or the first load).
+  let lastPlayedId: string | null = null
+  e.subscribe((s) => {
+    const store = useLibraryStore.getState()
+    store.setMixPlayback(s)
+    const id = s.current?.id ?? null
+    if (id && id !== lastPlayedId) { lastPlayedId = id; store.markPlayed(id) }
+  })
   window.electronAPI.getAudioServerPort().then((p) => e.setPort(p))
   return e
 }

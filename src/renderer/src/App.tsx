@@ -776,7 +776,7 @@ function WelcomeScreen({ onAddFolder, hasContent, onClose }: {
           <img src={libraryLogo} alt="Limina Library" className="object-contain w-40 h-40 rounded-2xl" />
           <div>
             <h1 className="text-base font-semibold tracking-wide text-gray-100">Limina Library</h1>
-            <p className="text-[11px] text-gray-500 mt-0.5">v1.0.0 · Companion app for Music for Breathwork</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">v{__APP_VERSION__} · Companion app for Music for Breathwork</p>
           </div>
           <p className="max-w-sm text-xs leading-relaxed text-gray-400">
             Organise your local audio files, match them to the Music for Breathwork catalogue,

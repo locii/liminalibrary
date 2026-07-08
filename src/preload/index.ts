@@ -39,6 +39,9 @@ const api: LibraryAPI = {
   mfbGetUpdatedMap: () => ipcRenderer.invoke('mfb:getUpdatedMap'),
   spotifySearch: (q) => ipcRenderer.invoke('spotify:search', q),
   spotifyImport: (entry) => ipcRenderer.invoke('spotify:import', entry),
+  listSystemPresets: () => ipcRenderer.invoke('presets:list'),
+  saveSystemPreset: (preset) => ipcRenderer.invoke('presets:save', preset),
+  deleteSystemPreset: (id) => ipcRenderer.invoke('presets:delete', id),
 
   authLogin: (email, password) => ipcRenderer.invoke('auth:login', email, password),
   authLogout: () => ipcRenderer.invoke('auth:logout'),

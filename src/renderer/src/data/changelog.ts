@@ -10,6 +10,38 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2.4.0',
+    date: 'July 2026',
+    sections: [
+      {
+        icon: '✧',
+        title: 'Session presets',
+        items: [
+          'Load curated starting points from the new System Presets list in Session Mode — served live from Music for Breathwork, so they grow without an app update',
+        ],
+      },
+      {
+        icon: '↻',
+        title: 'Smarter mixing',
+        items: [
+          'Tracks never repeat within a session — once played, generators won\'t pick them again',
+          'A generator won\'t start a fresh song in its final minute, so sections hand over cleanly',
+          'Skipping while a crossfade is still in progress no longer drops the audio',
+        ],
+      },
+      {
+        icon: '≡',
+        title: 'Queue & generators',
+        items: [
+          'Collapse a tag generator\'s Up Next list, and shuffle just that generator with Random',
+          'Drag tracks within a generator to reorder, onto Now Playing to play, or double-click to play now',
+          'Type an exact section length (e.g. 8 minutes) as well as cycling the presets',
+          'Every generator chip now has a tooltip explaining what it does',
+        ],
+      },
+    ],
+  },
+  {
     version: '2.3.0',
     date: 'July 2026',
     sections: [

@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.4.0 — Session presets & smoother mixing
+
+Curated Session Mode starting points you can load in one click, plus a batch of Session Mode refinements.
+
+- **System presets** — Load curated starting points (tag generators + Feel EQ) from the new **System Presets** list in Session Mode's Load menu. They're served live from Music for Breathwork, so the collection grows without an app update.
+- **No repeats in a session** — Once a track has played, generators won't pick it again for the rest of the session.
+- **Cleaner section handoffs** — A generator no longer starts a fresh song in its final minute, avoiding tracks that end moments after they begin.
+- **Smoother mid-crossfade skips** — Hitting Fade Next while a crossfade is still in progress no longer drops the audio — it fades from whichever track is louder.
+- **Collapse a generator** — Fold a tag generator's Up Next list away with a click, and shuffle just that generator's tracks with **Random**.
+- **Reorder and play from a generator** — Drag tracks within a generator to reorder, drag them onto Now Playing to play, or double-click to play now (played tracks leave the list).
+- **Set an exact section length** — Type a specific length for a generator (e.g. 8 minutes) as well as cycling the presets.
+- **Clearer chips** — Every chip on a generator now has a tooltip explaining what it does.
+
 ## v2.3.0 — Always up to date
 
 Your matched library now keeps itself current with Music for Breathwork, and Session Mode gains a couple of quality-of-life touches.

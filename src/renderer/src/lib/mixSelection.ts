@@ -85,6 +85,11 @@ export function materializeGroup(
   return out
 }
 
+// Within this much of a timed generator's end, don't start a fresh song — hand
+// over to the next queue item instead. Prevents a short track ending/skipping
+// right at the duration boundary, which would double up transitions in that area.
+const NEW_SONG_MIN_REMAINING_MS = 60000
+
 // When a tag-group generator became the queue front (for its play-duration timer).
 let genStart: { id: string; at: number } | null = null
 
@@ -128,16 +133,28 @@ export function makeMixProvider(): (currentId: string | null) => NextTrack | nul
       // advances to the next item so later tracks/groups get their turn.
       const now = Date.now()
       if (!genStart || genStart.id !== front.id) genStart = { id: front.id, at: now }
-      if (front.durationMin != null && now - genStart.at >= front.durationMin * 60000) {
-        st.dequeueFront()
-        genStart = null
-        continue
+      if (front.durationMin != null) {
+        const remaining = front.durationMin * 60000 - (now - genStart.at)
+        // Duration elapsed → hand over. Also, once we're inside the last minute,
+        // don't start a fresh song (it would end/skip right at the boundary and
+        // double up transitions) — advance now, but only if there's a next item
+        // to take over. The last generator just rides its current track out.
+        if (remaining <= 0 || (remaining < NEW_SONG_MIN_REMAINING_MS && q.length > 1)) {
+          st.dequeueFront()
+          genStart = null
+          continue
+        }
       }
       st.setMixTailTags(front.tags)
       // Play the head of the materialised list; the ghost shows the same order.
-      const exclude = new Set(currentId ? [currentId] : [])
-      let up = front.upcoming.filter((id) => id !== currentId)
+      // Exclude tracks already played this session so nothing repeats.
+      const played = st.playedIds
+      const exclude = new Set<string>(played)
+      if (currentId) exclude.add(currentId)
+      let up = front.upcoming.filter((id) => id !== currentId && !played.has(id))
       if (up.length === 0) up = materializeGroup(front.tags, front.matchMode, front.feel, 12, exclude)
+      // Whole tag pool exhausted this session → allow repeats rather than stall.
+      if (up.length === 0) up = materializeGroup(front.tags, front.matchMode, front.feel, 12, new Set(currentId ? [currentId] : []))
       if (up.length === 0) break
       const nextId = up[0]
       let rest = up.slice(1)
@@ -155,7 +172,10 @@ export function makeMixProvider(): (currentId: string | null) => NextTrack | nul
     const st = useLibraryStore.getState()
     const liveTargets = Object.entries(st.mixFeatureTargets)
     const cands = st.mixTailTags ? filterByTags(st.mixTailTags, 'any') : computePool()
-    const pool = cands.length ? cands : computePool()
+    const base = cands.length ? cands : computePool()
+    // Skip session-played tracks; if that empties the pool, allow repeats.
+    const unplayed = base.filter((f) => !st.playedIds.has(f.id))
+    const pool = unplayed.length ? unplayed : base
     const pick = pickSteered(pool, currentId, liveTargets)
     return pick ? { file: pick } : null
   }

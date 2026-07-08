@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { BreathworkPhase, Catalogue, LibraryFile, MfbMatch, MfbPlaylist, MfbPlaylistDetail, MfbTag, WatchedFolder } from '../types'
+import type { BreathworkPhase, Catalogue, LibraryFile, MfbMatch, MfbPlaylist, MfbPlaylistDetail, MfbTag, WatchedFolder, SessionPresetDTO } from '../types'
 import type { MixEngineState } from '../lib/mixEngine'
 import { reconcileTags } from '../lib/mfbTags'
 
@@ -224,6 +224,11 @@ interface LibraryState {
   moveQueueItem: (fromId: string, toId: string) => void
   clearQueue: () => void
   dequeueFront: () => void
+  /** Track ids already played this session — excluded from generator re-picks so
+   *  no track repeats within a session. Reset when the queue is cleared/replaced. */
+  playedIds: Set<string>
+  markPlayed: (id: string) => void
+  resetPlayed: () => void
   /** Drop all queue items before `id` (jump the queue to that item). */
   dropQueueBefore: (id: string) => void
   /** Tags of the most-recently-used tag group, driving the tail once the queue empties. */
@@ -234,6 +239,9 @@ interface LibraryState {
   saveMix: (name: string) => void
   loadMix: (id: string) => void
   deleteMix: (id: string) => void
+  /** Curated system presets served from MFB (not persisted; refetched per session). */
+  systemPresets: SavedMix[]
+  loadSystemPresets: () => Promise<void>
   /** Recorded sessions (skeleton + realized tracklist), persisted in the catalogue. */
   mixSessions: MixSession[]
   addMixSession: (session: MixSession) => void
@@ -468,8 +476,11 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     q.splice(to, 0, m)
     return { mixQueue: q }
   }),
-  clearQueue: () => set({ mixQueue: [] }),
+  clearQueue: () => set({ mixQueue: [], playedIds: new Set() }),
   dequeueFront: () => set((s) => ({ mixQueue: s.mixQueue.slice(1) })),
+  playedIds: new Set(),
+  markPlayed: (id) => set((s) => (s.playedIds.has(id) ? {} : { playedIds: new Set(s.playedIds).add(id) })),
+  resetPlayed: () => set({ playedIds: new Set() }),
   dropQueueBefore: (id) => set((s) => {
     const i = s.mixQueue.findIndex((q) => q.id === id)
     return i > 0 ? { mixQueue: s.mixQueue.slice(i) } : {}
@@ -488,14 +499,43 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     ],
   })),
   loadMix: (id) => set((s) => {
-    const m = s.savedMixes.find((x) => x.id === id)
+    const m = s.savedMixes.find((x) => x.id === id) ?? s.systemPresets.find((x) => x.id === id)
     if (!m) return {}
+    // System presets are shared and can be loaded repeatedly: regenerate queue-item
+    // ids and reset upcoming so ids never clash and tag groups re-materialise against
+    // the current library. User templates load as-is.
+    const isSystem = s.systemPresets.some((x) => x.id === m.id)
+    const queue: MixQueueItem[] = isSystem
+      ? m.queue.map((it) => (it.kind === 'tags' ? { ...it, id: mixItemId(), upcoming: [] } : { ...it, id: mixItemId() }))
+      : m.queue
     return {
-      mixQueue: m.queue, mixTags: m.mixTags, mixMatchMode: m.mixMatchMode,
+      mixQueue: queue, mixTags: m.mixTags, mixMatchMode: m.mixMatchMode,
       mixFeatureTargets: m.mixFeatureTargets, mixFadeMs: m.mixFadeMs, mixTailTags: m.mixTailTags,
+      playedIds: new Set<string>(),
     }
   }),
   deleteMix: (id) => set((s) => ({ savedMixes: s.savedMixes.filter((x) => x.id !== id) })),
+  systemPresets: [],
+  loadSystemPresets: async () => {
+    try {
+      const dtos = await window.electronAPI.listSystemPresets()
+      // Map the server DTO to the SavedMix shape the queue/dropdown already speaks.
+      const presets: SavedMix[] = dtos.map((d: SessionPresetDTO) => ({
+        id: `srv_${d.id}`,
+        name: d.name,
+        createdAt: d.updated_at,
+        queue: (d.payload.queue as MixQueueItem[]) ?? [],
+        mixTags: d.payload.mixTags ?? [],
+        mixMatchMode: d.payload.mixMatchMode ?? 'any',
+        mixFeatureTargets: d.payload.mixFeatureTargets ?? {},
+        mixFadeMs: d.payload.mixFadeMs ?? 0,
+        mixTailTags: d.payload.mixTailTags ?? null,
+      }))
+      set({ systemPresets: presets })
+    } catch (e) {
+      console.error('[loadSystemPresets] failed', e)
+    }
+  },
   mixSessions: [],
   addMixSession: (session) => set((s) => ({ mixSessions: [session, ...s.mixSessions] })),
   deleteMixSession: (id) => set((s) => ({ mixSessions: s.mixSessions.filter((x) => x.id !== id) })),
@@ -532,7 +572,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       // transition — the final track (ended by stopping) should ride out.
       holdMs: (p.ended === 'crossfade' || p.ended === 'skip') ? (p.playedMs || undefined) : undefined,
     }))
-    return { mixQueue: queue, mixFadeMs: sess.skeleton.mixFadeMs, mixTailTags: null }
+    return { mixQueue: queue, mixFadeMs: sess.skeleton.mixFadeMs, mixTailTags: null, playedIds: new Set<string>() }
   }),
   recording: null,
   setRecording: (r) => set({ recording: r }),

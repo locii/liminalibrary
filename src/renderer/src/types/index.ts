@@ -13,6 +13,8 @@ export type {
   MfbPlaylistDetail,
   PlaylistTrackSearchResult,
   SpotifySearchCandidate,
+  SessionPresetDTO,
+  SessionPresetPayload,
 } from '../../../shared/types'
 
 export { BREATHWORK_PHASES, PHASE_COLORS, phaseColorForTag, mfbTrackUrl, appleMusicDeepLink } from '../../../shared/types'

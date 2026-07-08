@@ -1,4 +1,4 @@
-import type { WatchedFolder, LibraryFile, ScanResult, Catalogue, MfbMatch, MfbPlaylist, MfbPlaylistDetail, PlaylistTrackSearchResult, MfbAudioFeatures, SpotifySearchCandidate } from '../shared/types'
+import type { WatchedFolder, LibraryFile, ScanResult, Catalogue, MfbMatch, MfbPlaylist, MfbPlaylistDetail, PlaylistTrackSearchResult, MfbAudioFeatures, SpotifySearchCandidate, SessionPresetDTO, SessionPresetPayload } from '../shared/types'
 
 export interface MfbMatchEntry {
   id: string
@@ -79,6 +79,9 @@ export interface LibraryAPI {
   mfbGetUpdatedMap: () => Promise<Record<number, string>>
   spotifySearch: (q: string) => Promise<{ candidates: SpotifySearchCandidate[]; error?: string }>
   spotifyImport: (entry: SpotifyImportEntry) => Promise<SpotifyImportResult>
+  listSystemPresets: () => Promise<SessionPresetDTO[]>
+  saveSystemPreset: (preset: { name: string; payload: SessionPresetPayload; sort_order?: number }) => Promise<SessionPresetDTO>
+  deleteSystemPreset: (id: number) => Promise<{ deleted: boolean }>
 
   authLogin: (email: string, password: string) => Promise<{ id: number; name: string; email: string }>
   authLogout: () => Promise<void>

@@ -17,9 +17,16 @@ import type { MixQueueItem } from '../store/libraryStore'
 // Where the Pro upsell (locked Session Mode features) sends free users.
 const PRO_UPSELL_URL = 'https://musicforbreathwork.com/pricing'
 
+// MFB user ids allowed to author/manage system presets. Mirrors
+// SessionPresetController::ADMIN_IDS on the MFB API (writes are enforced there).
+const PRESET_ADMIN_IDS = [1, 117]
+
 export const MIX_TAG_DND_TYPE = 'application/x-limina-tag'
 export const MIX_TRACK_DND_TYPE = 'application/x-limina-mix-track'
 export const MIX_QUEUE_DND_TYPE = 'application/x-limina-mix-queue'
+// Marks a drag that originated from a tag-generator's upcoming list, carrying the
+// generator's item id so a play (drop on Now Playing) can consume it from there.
+export const MIX_UPCOMING_ITEM_DND = 'application/x-limina-mix-upcoming-item'
 
 // Curated MFB audio features exposed as the 4-band "feel" EQ (all 0–1 scaled).
 // Colours match the Music for Breathwork phase-analysis chart.
@@ -71,6 +78,8 @@ export function MixPanel(): JSX.Element {
   const saveMix = useLibraryStore((s) => s.saveMix)
   const loadMix = useLibraryStore((s) => s.loadMix)
   const deleteMix = useLibraryStore((s) => s.deleteMix)
+  const systemPresets = useLibraryStore((s) => s.systemPresets)
+  const loadSystemPresets = useLibraryStore((s) => s.loadSystemPresets)
   const recording = useLibraryStore((s) => s.recording)
   const mixSessions = useLibraryStore((s) => s.mixSessions)
   const loadSession = useLibraryStore((s) => s.loadSession)
@@ -83,6 +92,9 @@ export function MixPanel(): JSX.Element {
   // templates, and loading saved sessions are Pro-only. Currently maps to being
   // signed in — swap this for the course/subscription entitlement when it lands.
   const isPro = userAccount !== null
+  // Preset admins can author/manage system presets served to all users.
+  // Keep in sync with SessionPresetController::ADMIN_IDS on the MFB side.
+  const isAdmin = userAccount ? PRESET_ADMIN_IDS.includes(userAccount.id) : false
 
   const featureTargetEntries = useMemo(() => Object.entries(mixFeatureTargets), [mixFeatureTargets])
 
@@ -112,6 +124,11 @@ export function MixPanel(): JSX.Element {
     if (!userAccount || playlists.length > 0) return
     window.electronAPI.getUserPlaylists().then(setPlaylists).catch(() => {})
   }, [userAccount, playlists.length, setPlaylists])
+
+  // Curated system presets are served from MFB; fetch once signed in.
+  useEffect(() => {
+    if (userAccount) void loadSystemPresets()
+  }, [userAccount, loadSystemPresets])
 
   // Live current file (engine holds a load-time snapshot; peaks load async).
   const cur = useMemo(() => {
@@ -167,7 +184,7 @@ export function MixPanel(): JSX.Element {
   useEffect(() => {
     for (const item of mixQueue) {
       if (item.kind === 'tags' && item.upcoming.length === 0) {
-        const ids = materializeGroup(item.tags, item.matchMode, item.feel, 10, new Set())
+        const ids = materializeGroup(item.tags, item.matchMode, item.feel, 10, new Set(useLibraryStore.getState().playedIds))
         if (ids.length > 0) setQueueItemUpcoming(item.id, ids)
       }
     }
@@ -192,25 +209,31 @@ export function MixPanel(): JSX.Element {
     const st = useLibraryStore.getState()
     const item = st.mixQueue.find((q) => q.id === itemId)
     if (!item || item.kind !== 'tags') return
-    const more = materializeGroup(item.tags, item.matchMode, item.feel, 10, new Set(item.upcoming))
+    const more = materializeGroup(item.tags, item.matchMode, item.feel, 10, new Set([...item.upcoming, ...st.playedIds]))
     if (more.length > 0) st.setQueueItemUpcoming(itemId, [...item.upcoming, ...more])
   }, [])
 
-  // Reorder a tag-generator's upcoming list — playback follows this order.
-  const sortUpcoming = useCallback((itemId: string, key: 'title' | 'artist' | 'shuffle') => {
+  // Shuffle a tag-generator's upcoming list — playback follows this order.
+  const shuffleUpcoming = useCallback((itemId: string) => {
     const st = useLibraryStore.getState()
     const item = st.mixQueue.find((q) => q.id === itemId)
     if (!item || item.kind !== 'tags') return
     const ids = [...item.upcoming]
-    if (key === 'shuffle') {
-      for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]] }
-    } else {
-      const val = (id: string): string => {
-        const f = st.files.find((x) => x.id === id)
-        return ((key === 'title' ? (f?.trackTitle || f?.fileName) : f?.artist) ?? '').toLowerCase()
-      }
-      ids.sort((a, b) => val(a).localeCompare(val(b)))
-    }
+    for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]] }
+    st.setQueueItemUpcoming(itemId, ids)
+  }, [])
+
+  // Drag-reorder one track within a tag-generator's upcoming list.
+  const reorderUpcoming = useCallback((itemId: string, fromId: string, toId: string) => {
+    const st = useLibraryStore.getState()
+    const item = st.mixQueue.find((q) => q.id === itemId)
+    if (!item || item.kind !== 'tags') return
+    const ids = [...item.upcoming]
+    const from = ids.indexOf(fromId)
+    const to = ids.indexOf(toId)
+    if (from < 0 || to < 0 || from === to) return
+    const [m] = ids.splice(from, 1)
+    ids.splice(to, 0, m)
     st.setQueueItemUpcoming(itemId, ids)
   }, [])
 
@@ -238,7 +261,17 @@ export function MixPanel(): JSX.Element {
       }
     }
   }, [])
-  const playTrack = useCallback((f: LibraryFile) => { engineRef.current?.fadeTo(f) }, [])
+  // Play a track picked from a tag-generator's upcoming list and consume it from
+  // that generator (it's been played, so it shouldn't come round again).
+  const consumeFromUpcoming = useCallback((itemId: string, fileId: string) => {
+    const st = useLibraryStore.getState()
+    const item = st.mixQueue.find((q) => q.id === itemId)
+    if (item && item.kind === 'tags') st.setQueueItemUpcoming(itemId, item.upcoming.filter((x) => x !== fileId))
+  }, [])
+  const playUpcomingTrack = useCallback((itemId: string, f: LibraryFile) => {
+    consumeFromUpcoming(itemId, f.id)
+    engineRef.current?.fadeTo(f)
+  }, [consumeFromUpcoming])
   // Inline name entry for saving (Electron blocks window.prompt).
   const [savingName, setSavingName] = useState<string | null>(null)
   const confirmSave = useCallback(() => {
@@ -246,6 +279,33 @@ export function MixPanel(): JSX.Element {
     if (name) saveMix(name)
     setSavingName(null)
   }, [savingName, saveMix])
+  // Admin (user 1): publish the current queue as a system preset straight to MFB,
+  // so it's live for every user with no app release. Only portable tag-generator
+  // items are kept — local `track` items reference a machine-local file id.
+  const [savingPresetName, setSavingPresetName] = useState<string | null>(null)
+  const [presetSaving, setPresetSaving] = useState(false)
+  const confirmSavePreset = useCallback(async () => {
+    const name = (savingPresetName ?? '').trim()
+    if (!name) { setSavingPresetName(null); return }
+    const st = useLibraryStore.getState()
+    const queue = st.mixQueue
+      .filter((q) => q.kind === 'tags')
+      .map((q, i) => ({ ...q, id: `sys_item_${i}`, upcoming: [] as string[] }))
+    const payload = {
+      queue, mixTags: st.mixTags, mixMatchMode: st.mixMatchMode,
+      mixFeatureTargets: st.mixFeatureTargets, mixFadeMs: st.mixFadeMs, mixTailTags: st.mixTailTags,
+    }
+    setSavingPresetName(null)
+    setPresetSaving(true)
+    try {
+      await window.electronAPI.saveSystemPreset({ name, payload })
+      await loadSystemPresets()
+    } catch (e) {
+      console.error('[saveSystemPreset] failed', e)
+    } finally {
+      setPresetSaving(false)
+    }
+  }, [savingPresetName, loadSystemPresets])
   // Guided tour for Session Mode — auto-shown on first entry, replayable via the ? button.
   // Free users skip the Pro-only steps (record, load, templates, export).
   const tourSteps = useMemo(
@@ -429,9 +489,12 @@ export function MixPanel(): JSX.Element {
   const onNowPlayingDrop = useCallback((e: React.DragEvent): void => {
     e.preventDefault(); setNpDragOver(false)
     const id = e.dataTransfer.getData(MIX_TRACK_DND_TYPE)
+    const fromItem = e.dataTransfer.getData(MIX_UPCOMING_ITEM_DND)
     const f = id ? files.find((x) => x.id === id) : null
     if (f) engineRef.current?.fadeTo(f)
-  }, [files])
+    // Dragged out of a tag generator's list → consume it from that generator.
+    if (f && fromItem) consumeFromUpcoming(fromItem, f.id)
+  }, [files, consumeFromUpcoming])
 
   // --- playlist → queue ----------------------------------------------------
   const [playlistId, setPlaylistId] = useState<number | ''>('')
@@ -440,14 +503,23 @@ export function MixPanel(): JSX.Element {
   const [loadSel, setLoadSel] = useState<string>('')
   const handleLoadSelection = useCallback((value: string) => {
     setLoadSel(value)
-    if (value.startsWith('tpl:')) loadMix(value.slice(4))
+    // Templates ("tpl:") and system presets ("sys:") both resolve via loadMix.
+    if (value.startsWith('tpl:') || value.startsWith('sys:')) loadMix(value.slice(4))
     else if (value.startsWith('ses:')) loadSession(value.slice(4))
   }, [loadMix, loadSession])
-  const deleteLoadSelection = useCallback(() => {
+  const deleteLoadSelection = useCallback(async () => {
     if (loadSel.startsWith('tpl:')) deleteMix(loadSel.slice(4))
     else if (loadSel.startsWith('ses:')) deleteMixSession(loadSel.slice(4))
+    else if (loadSel.startsWith('sys:')) {
+      // System presets carry a `srv_<serverId>` id; admins delete them on MFB.
+      const serverId = Number(loadSel.slice(4).replace('srv_', ''))
+      if (Number.isFinite(serverId)) {
+        try { await window.electronAPI.deleteSystemPreset(serverId); await loadSystemPresets() }
+        catch (e) { console.error('[deleteSystemPreset] failed', e) }
+      }
+    }
     setLoadSel('')
-  }, [loadSel, deleteMix, deleteMixSession])
+  }, [loadSel, deleteMix, deleteMixSession, loadSystemPresets])
   const addPlaylistToQueue = useCallback(async () => {
     if (playlistId === '') return
     setAddingPlaylist(true)
@@ -501,12 +573,17 @@ export function MixPanel(): JSX.Element {
               Load…
               <svg className="w-3 h-3 text-accent shrink-0" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2.5" y="5.5" width="7" height="5" rx="1" /><path d="M4 5.5V4a2 2 0 014 0v1.5" /></svg>
             </button>
-          ) : (savedMixes.length > 0 || mixSessions.length > 0) ? (
+          ) : (savedMixes.length > 0 || mixSessions.length > 0 || systemPresets.length > 0) ? (
             <span data-tour="session-load" className="flex items-center gap-1">
               <select value={loadSel} onChange={(e) => handleLoadSelection(e.target.value)}
                 className="bg-surface-panel border border-surface-border rounded px-2 py-0.5 text-[10px] text-gray-300 outline-none max-w-[160px]"
-                title="Load a template or recorded session">
+                title="Load a system preset, template, or recorded session">
                 <option value="">Load…</option>
+                {systemPresets.length > 0 && (
+                  <optgroup label="System Presets">
+                    {systemPresets.map((m) => <option key={m.id} value={`sys:${m.id}`}>{m.name}</option>)}
+                  </optgroup>
+                )}
                 {savedMixes.length > 0 && (
                   <optgroup label="Templates">
                     {savedMixes.map((m) => <option key={m.id} value={`tpl:${m.id}`}>{m.name}</option>)}
@@ -518,9 +595,9 @@ export function MixPanel(): JSX.Element {
                   </optgroup>
                 )}
               </select>
-              {loadSel && (
+              {loadSel && (!loadSel.startsWith('sys:') || isAdmin) && (
                 <button type="button" onClick={deleteLoadSelection}
-                  title={loadSel.startsWith('ses:') ? 'Delete this recorded session' : 'Delete this template'}
+                  title={loadSel.startsWith('ses:') ? 'Delete this recorded session' : loadSel.startsWith('sys:') ? 'Delete this system preset (admin)' : 'Delete this template'}
                   className="text-gray-600 transition-colors hover:text-gray-400">
                   <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 3h8M4.5 3V2h3v1M4 3v6M6 3v6M8 3v6M3 3l.5 7h5l.5-7" /></svg>
                 </button>
@@ -562,6 +639,29 @@ export function MixPanel(): JSX.Element {
               <button type="button" onClick={() => setSavingName('')} className="text-[10px] text-gray-400 hover:text-accent transition-colors" title="Save this queue as a session template">Save as Template</button>
             )}
           </span>
+
+          {/* Admin (user 1): publish this queue as a system preset for all users. */}
+          {isAdmin && (
+            <span className="flex items-center">
+              {savingPresetName !== null ? (
+                <span className="flex items-center gap-1">
+                  <input autoFocus value={savingPresetName} onChange={(e) => setSavingPresetName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void confirmSavePreset(); else if (e.key === 'Escape') setSavingPresetName(null) }}
+                    onBlur={() => setSavingPresetName(null)} placeholder="System preset name…"
+                    className="w-32 bg-surface-panel border border-surface-border rounded px-1.5 py-0.5 text-[10px] text-gray-200 placeholder-gray-700 outline-none focus:border-accent/50" />
+                  <button type="button" onMouseDown={(e) => { e.preventDefault(); void confirmSavePreset() }} className="text-[10px] text-accent hover:text-accent/80 transition-colors">Publish</button>
+                </span>
+              ) : (
+                <button type="button" onClick={() => setSavingPresetName('')} disabled={presetSaving || mixQueue.filter((q) => q.kind === 'tags').length === 0}
+                  className="text-[10px] text-accent/80 hover:text-accent disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title={mixQueue.filter((q) => q.kind === 'tags').length === 0
+                    ? 'Add a tag generator to the queue first — presets only store tag generators (not individual tracks)'
+                    : 'Publish this queue’s tag generators as a system preset for all users (admin)'}>
+                  {presetSaving ? 'Publishing…' : 'Save as System Preset'}
+                </button>
+              )}
+            </span>
+          )}
           </>)}
         </div>
       </div>
@@ -746,8 +846,8 @@ export function MixPanel(): JSX.Element {
             ) : (
               <QueueList items={mixQueue} fileById={fileById} tagPreviews={tagPreviews} selectedId={selectedId}
                 onMove={moveQueueItem} onRemove={removeQueueItem} onSelect={setSelectedId} onPlay={playQueueItem}
-                onPlayTrack={playTrack} onSetMatch={setQueueItemMatch} onSetDuration={setQueueItemDuration}
-                onShowMore={showMoreUpcoming} onSortUpcoming={sortUpcoming} />
+                onPlayUpcoming={playUpcomingTrack} onSetMatch={setQueueItemMatch} onSetDuration={setQueueItemDuration}
+                onShowMore={showMoreUpcoming} onShuffleUpcoming={shuffleUpcoming} onReorderUpcoming={reorderUpcoming} />
             )}
             <div className="px-4 py-2 text-[10px] text-gray-700">
               then: {mixTailTags ? `random from ${mixTailTags.join(', ')}` : `random from pool (${pool.length})`}
@@ -1052,7 +1152,7 @@ const nextDuration = (d: number | null): number | null => {
   return QUEUE_DURATIONS[(i + 1) % QUEUE_DURATIONS.length]
 }
 
-const QueueList = memo(function QueueList({ items, fileById, tagPreviews, selectedId, onMove, onRemove, onSelect, onPlay, onPlayTrack, onSetMatch, onSetDuration, onShowMore, onSortUpcoming }: {
+const QueueList = memo(function QueueList({ items, fileById, tagPreviews, selectedId, onMove, onRemove, onSelect, onPlay, onPlayUpcoming, onSetMatch, onSetDuration, onShowMore, onShuffleUpcoming, onReorderUpcoming }: {
   items: MixQueueItem[]
   fileById: Map<string, LibraryFile>
   tagPreviews: Map<string, { count: number; tracks: LibraryFile[] }>
@@ -1061,16 +1161,30 @@ const QueueList = memo(function QueueList({ items, fileById, tagPreviews, select
   onRemove: (id: string) => void
   onSelect: (id: string) => void
   onPlay: (item: MixQueueItem) => void
-  onPlayTrack: (f: LibraryFile) => void
+  onPlayUpcoming: (itemId: string, f: LibraryFile) => void
   onSetMatch: (id: string, mode: 'any' | 'all') => void
   onSetDuration: (id: string, min: number | null) => void
   onShowMore: (id: string) => void
-  onSortUpcoming: (id: string, key: 'title' | 'artist' | 'shuffle') => void
+  onShuffleUpcoming: (id: string) => void
+  onReorderUpcoming: (itemId: string, fromId: string, toId: string) => void
 }): JSX.Element {
   const [dragId, setDragId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
+  // Drag state for reordering tracks *within* a tag generator's upcoming list.
+  const [upDrag, setUpDrag] = useState<{ itemId: string; fromId: string } | null>(null)
+  const [upOverId, setUpOverId] = useState<string | null>(null)
+  // Inline duration entry: which generator is being typed into, + its draft value.
+  const [durEditId, setDurEditId] = useState<string | null>(null)
+  const [durDraft, setDurDraft] = useState('')
+  const commitDuration = (id: string): void => {
+    const n = Math.round(Number(durDraft))
+    onSetDuration(id, durDraft.trim() !== '' && Number.isFinite(n) && n > 0 ? n : null)
+    setDurEditId(null)
+  }
   // How many upcoming tracks each tag-generator reveals (grows by 10).
   const [shownCount, setShownCount] = useState<Record<string, number>>({})
+  // Which tag-generators have their upcoming list collapsed (expanded by default).
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   return (
     <>
       {items.map((item, i) => {
@@ -1098,10 +1212,24 @@ const QueueList = memo(function QueueList({ items, fileById, tagPreviews, select
                 </>
               ) : (
                 <span className="flex-1 inline-flex items-center gap-1.5 min-w-0">
-                  <svg className="w-3 h-3 shrink-0 text-accent/70" viewBox="0 0 12 12" fill="currentColor"><path d="M1.5 2A1.5 1.5 0 013 .5h3.9a1.5 1.5 0 011 .4l3.1 3.2a1.5 1.5 0 010 2.1L7.9 9.3a1.5 1.5 0 01-2.1 0L2.4 5.9A1.5 1.5 0 012 4.9V2z" /></svg>
-                  <span className="truncate text-accent/90">{item.tags.length > 0 ? item.tags.join(item.matchMode === 'all' ? ' + ' : ', ') : 'all tracks'}</span>
+                  {preview && preview.tracks.length > 0 ? (
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setCollapsed((c) => ({ ...c, [item.id]: !c[item.id] })) }}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                      className="shrink-0 text-gray-600 transition-colors hover:text-accent"
+                      title={collapsed[item.id] ? 'Show queued tracks' : 'Hide queued tracks'}>
+                      <svg className={`w-2.5 h-2.5 transition-transform ${collapsed[item.id] ? '' : 'rotate-90'}`} viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 2l4 3-4 3" /></svg>
+                    </button>
+                  ) : (
+                    <span className="w-2.5 shrink-0" />
+                  )}
+                  <svg className="w-3 h-3 shrink-0 text-accent/70" viewBox="0 0 12 12" fill="currentColor" aria-label="Tag generator"><title>Tag generator — auto-plays library tracks matching these tags</title><path d="M1.5 2A1.5 1.5 0 013 .5h3.9a1.5 1.5 0 011 .4l3.1 3.2a1.5 1.5 0 010 2.1L7.9 9.3a1.5 1.5 0 01-2.1 0L2.4 5.9A1.5 1.5 0 012 4.9V2z" /></svg>
+                  <span className="truncate text-accent/90"
+                    title={item.tags.length > 0 ? `Plays tracks tagged ${item.tags.join(item.matchMode === 'all' ? ' AND ' : ' OR ')}` : 'Plays random tracks from the whole pool (no tag filter)'}>
+                    {item.tags.length > 0 ? item.tags.join(item.matchMode === 'all' ? ' + ' : ', ') : 'all tracks'}
+                  </span>
                   {item.tags.length > 1 && (
                     <button type="button" onClick={(e) => { e.stopPropagation(); onSetMatch(item.id, item.matchMode === 'all' ? 'any' : 'all') }}
+                      onDoubleClick={(e) => e.stopPropagation()}
                       className="shrink-0 px-1 rounded text-[9px] tracking-wide text-gray-500 hover:text-accent bg-surface-panel border border-surface-border transition-colors"
                       title={item.matchMode === 'all' ? 'Matches tracks with ALL these tags — click for ANY' : 'Matches tracks with ANY of these tags — click for ALL'}>
                       {item.matchMode === 'all' ? 'ALL' : 'ANY'}
@@ -1110,14 +1238,38 @@ const QueueList = memo(function QueueList({ items, fileById, tagPreviews, select
                   {Object.entries(item.feel).map(([k, wt]) => {
                     const feat = MIX_FEATURES.find((ff) => ff.key === k)
                     if (!feat) return null
-                    return <span key={k} className="shrink-0 text-[9px] tabular-nums" style={{ color: feat.color }} title={feat.label}>{feat.short} {wt > 0 ? '+' : ''}{Math.round(wt * 100)}</span>
+                    return <span key={k} className="shrink-0 text-[9px] tabular-nums" style={{ color: feat.color }}
+                      title={`Feel EQ · ${feat.label}: ${wt > 0 ? 'boost' : 'cut'} ${Math.abs(Math.round(wt * 100))} (favours tracks ${wt > 0 ? 'higher' : 'lower'} in ${feat.label.toLowerCase()})`}>{feat.short} {wt > 0 ? '+' : ''}{Math.round(wt * 100)}</span>
                   })}
-                  <button type="button" onClick={(e) => { e.stopPropagation(); onSetDuration(item.id, nextDuration(item.durationMin)) }}
-                    className="shrink-0 px-1 rounded text-[9px] tabular-nums text-gray-500 hover:text-accent bg-surface-panel border border-surface-border transition-colors"
-                    title="How long this generator plays before the queue advances (click to change)">
-                    {item.durationMin == null ? '∞' : `${item.durationMin}m`}
-                  </button>
-                  <span className="text-gray-700 shrink-0 tabular-nums">{preview ? `${preview.count}` : 'random'}</span>
+                  {durEditId === item.id ? (
+                    <span className="inline-flex items-center shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <input autoFocus type="number" min={0} value={durDraft}
+                        onChange={(e) => setDurDraft(e.target.value)}
+                        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') commitDuration(item.id); else if (e.key === 'Escape') setDurEditId(null) }}
+                        onBlur={() => commitDuration(item.id)}
+                        placeholder="∞"
+                        className="w-9 px-1 rounded-l text-[9px] tabular-nums text-gray-200 bg-surface-panel border border-accent/50 outline-none" />
+                      <span className="px-1 rounded-r text-[9px] text-gray-500 bg-surface-panel border border-l-0 border-accent/50">m</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center shrink-0">
+                      <button type="button" onClick={(e) => { e.stopPropagation(); onSetDuration(item.id, nextDuration(item.durationMin)) }}
+                        onDoubleClick={(e) => e.stopPropagation()}
+                        className="px-1 rounded-l text-[9px] tabular-nums text-gray-500 hover:text-accent bg-surface-panel border border-surface-border transition-colors"
+                        title="How long this generator plays before the queue advances — click to cycle presets">
+                        {item.durationMin == null ? '∞' : `${item.durationMin}m`}
+                      </button>
+                      <button type="button" onClick={(e) => { e.stopPropagation(); setDurDraft(item.durationMin?.toString() ?? ''); setDurEditId(item.id) }}
+                        className="flex items-center px-0.5 rounded-r border border-l-0 border-surface-border text-gray-600 hover:text-accent bg-surface-panel transition-colors"
+                        title="Type a specific length in minutes (e.g. 8)">
+                        <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 1.5l2 2L4 10l-2.5.5L2 8z" /></svg>
+                      </button>
+                    </span>
+                  )}
+                  <span className="text-gray-700 shrink-0 tabular-nums"
+                    title={preview ? `${preview.count} matching track${preview.count === 1 ? '' : 's'} in your library` : 'Random tracks from the pool (no tag filter)'}>
+                    {preview ? `${preview.count}` : 'random'}
+                  </span>
                 </span>
               )}
               <button type="button" onClick={(e) => { e.stopPropagation(); onRemove(item.id) }}
@@ -1125,8 +1277,8 @@ const QueueList = memo(function QueueList({ items, fileById, tagPreviews, select
                 <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 2l6 6M8 2l-6 6" /></svg>
               </button>
             </div>
-            {/* Upcoming tracks — next 10, expandable, sortable; click one to play now */}
-            {item.kind === 'tags' && preview && preview.tracks.length > 0 && (() => {
+            {/* Upcoming tracks — next 10, expandable, drag to reorder; click one to play now */}
+            {item.kind === 'tags' && !collapsed[item.id] && preview && preview.tracks.length > 0 && (() => {
               const shown = shownCount[item.id] ?? 10
               const visible = preview.tracks.slice(0, shown)
               const canShowMore = shown < preview.count
@@ -1134,24 +1286,32 @@ const QueueList = memo(function QueueList({ items, fileById, tagPreviews, select
                 <div className="pb-1.5 pl-10 pr-4">
                   <div className="flex items-center gap-1.5 py-0.5 text-[9px] text-gray-700">
                     <span className="tracking-wide uppercase">Next {visible.length}{preview.count > preview.tracks.length ? ` of ${preview.count}` : ''}</span>
-                    <span className="flex items-center gap-1 ml-auto">
-                      <span className="text-gray-700">sort</span>
-                      {([['title', 'A–Z'], ['artist', 'Artist']] as const).map(([key, label]) => (
-                        <button key={key} type="button" onClick={(e) => { e.stopPropagation(); onSortUpcoming(item.id, key) }}
-                          className="px-1 text-gray-600 transition-colors border rounded hover:text-accent bg-surface-panel border-surface-border" title={`Sort upcoming by ${key}`}>
-                          {label}
-                        </button>
-                      ))}
-                      <button type="button" onClick={(e) => { e.stopPropagation(); onSortUpcoming(item.id, 'shuffle') }}
-                        className="px-1 text-gray-600 transition-colors border rounded hover:text-accent bg-surface-panel border-surface-border" title="Shuffle upcoming order">
-                        ⟳
+                    {preview.tracks.length > 1 && (
+                      <button type="button" onClick={(e) => { e.stopPropagation(); onShuffleUpcoming(item.id) }}
+                        className="inline-flex items-center gap-1 px-1 ml-auto text-gray-600 transition-colors border rounded hover:text-accent bg-surface-panel border-surface-border" title="Shuffle these tracks">
+                        <span aria-hidden>⟳</span> Random
                       </button>
-                    </span>
+                    )}
                   </div>
                   {visible.map((f, idx) => (
-                    <div key={f.id} onClick={() => onPlayTrack(f)}
-                      className="flex items-center gap-2 py-0.5 text-[10px] text-gray-600 hover:text-gray-300 cursor-pointer transition-colors"
-                      title="Click to play now">
+                    <div key={f.id} draggable
+                      onDoubleClick={() => onPlayUpcoming(item.id, f)}
+                      onDragStart={(e) => {
+                        setUpDrag({ itemId: item.id, fromId: f.id })
+                        e.dataTransfer.effectAllowed = 'copyMove'
+                        // Reorder within the list AND drag out like a pool track (drop on
+                        // Now Playing to play it, or on the queue to add it as a track).
+                        e.dataTransfer.setData(MIX_TRACK_DND_TYPE, f.id)
+                        e.dataTransfer.setData(MIX_UPCOMING_ITEM_DND, item.id)
+                      }}
+                      onDragOver={(e) => { if (upDrag?.itemId === item.id) { e.preventDefault(); e.stopPropagation(); if (upOverId !== f.id) setUpOverId(f.id) } }}
+                      onDrop={(e) => { if (upDrag?.itemId === item.id) { e.preventDefault(); e.stopPropagation(); if (upDrag.fromId !== f.id) onReorderUpcoming(item.id, upDrag.fromId, f.id) } setUpDrag(null); setUpOverId(null) }}
+                      onDragEnd={() => { setUpDrag(null); setUpOverId(null) }}
+                      className={`group flex items-center gap-2 py-0.5 text-[10px] text-gray-600 hover:text-gray-300 cursor-grab active:cursor-grabbing transition-colors ${
+                        upDrag?.itemId === item.id && upOverId === f.id && upDrag.fromId !== f.id ? 'border-t border-accent' : 'border-t border-transparent'
+                      } ${upDrag?.fromId === f.id ? 'opacity-40' : ''}`}
+                      title="Double-click to play now · drag to reorder or onto Now Playing">
+                      <svg className="w-2.5 h-2.5 text-gray-700 transition-opacity opacity-40 shrink-0 group-hover:opacity-70" viewBox="0 0 12 12" fill="currentColor"><circle cx="4" cy="3" r="1" /><circle cx="8" cy="3" r="1" /><circle cx="4" cy="6" r="1" /><circle cx="8" cy="6" r="1" /><circle cx="4" cy="9" r="1" /><circle cx="8" cy="9" r="1" /></svg>
                       <span className="w-4 text-right text-gray-700 tabular-nums text-[9px] shrink-0">{idx + 1}</span>
                       <span className="truncate">{f.trackTitle || f.fileName}</span>
                       {f.artist && <span className="truncate text-gray-700 max-w-[34%]">{f.artist}</span>}

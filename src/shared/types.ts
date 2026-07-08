@@ -147,6 +147,26 @@ export interface SpotifySearchCandidate {
   duration: number | null
 }
 
+/** The steering blob of a Session Mode preset — a SavedMix minus id/name/createdAt.
+ *  `queue` items are MixQueueItem (typed loosely here to avoid a renderer dep). */
+export interface SessionPresetPayload {
+  queue: unknown[]
+  mixTags: string[]
+  mixMatchMode: 'any' | 'all'
+  mixFeatureTargets: Record<string, number>
+  mixFadeMs: number
+  mixTailTags: string[] | null
+}
+
+/** A curated Session Mode preset served from MFB (GET /api/session-presets). */
+export interface SessionPresetDTO {
+  id: number
+  name: string
+  payload: SessionPresetPayload
+  sort_order: number
+  updated_at: string
+}
+
 export function appleMusicDeepLink(url: string): string {
   const lang = (typeof navigator !== 'undefined' ? navigator.language : undefined) || 'en-US'
   const m = lang.match(/[a-z]{2}-([A-Z]{2})/i)

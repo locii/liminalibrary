@@ -289,6 +289,24 @@ export class MixEngine {
   private crossfadeTo(next: LibraryFile, ms: number, offsetMs?: number, holdMs?: number): void {
     if (this.port === null) return
     this.ensureGraph()
+
+    // Interrupting an in-progress crossfade: fade from whichever deck is currently
+    // LOUDER (the established track) and discard the quieter one. Without this, a
+    // skip/fade taken while the incoming track is still ramping up would fade from
+    // that near-silent deck — briefly dropping the audio to nothing. (User-reported:
+    // hitting Fade Next again mid-crossfade cuts the music out.) Picking the louder
+    // deck means an early interruption fades from the outgoing track and drops the
+    // half-faded incoming one; a late interruption keeps the (now dominant) incoming.
+    if (this._fading && this._outgoing) {
+      const activeGain = this.gains[this.active]?.gain.value ?? 0
+      const outIdx: 0 | 1 = this.active === 0 ? 1 : 0
+      const outGain = this.gains[outIdx]?.gain.value ?? 0
+      if (outGain > activeGain) {
+        this.active = outIdx
+        this.current = this._outgoing
+      }
+    }
+
     const prevIdx = this.active
     const nextIdx: 0 | 1 = prevIdx === 0 ? 1 : 0
     const incoming = this.decks[nextIdx]

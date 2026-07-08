@@ -108,6 +108,29 @@ function postJson<T>(url: string, body: unknown, token?: string | null): Promise
   })
 }
 
+function deleteJson<T>(url: string, token?: string | null): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url)
+    const headers: Record<string, string> = { 'Accept': 'application/json', 'User-Agent': 'LiminaLibrary/1.0' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    const req = request({ method: 'DELETE', hostname: u.hostname, path: u.pathname + u.search, headers }, (res) => {
+      const chunks: Buffer[] = []
+      res.on('data', (c: Buffer) => chunks.push(c))
+      res.on('end', () => {
+        try {
+          const raw = Buffer.concat(chunks).toString('utf-8')
+          const status = res.statusCode ?? 0
+          if (status >= 400) reject(new Error(status === 401 ? 'NOT_AUTHENTICATED' : `HTTP ${status}: ${raw.slice(0, 300)}`))
+          else resolve((raw ? JSON.parse(raw) : {}) as T)
+        } catch (e) { reject(new Error(`JSON parse error: ${e}`)) }
+      })
+      res.on('error', reject)
+    })
+    req.on('error', reject)
+    req.end()
+  })
+}
+
 async function getCatalogue(): Promise<CatalogueTrack[]> {
   const token = await loadToken()
   if (!token) throw new Error('NOT_AUTHENTICATED')
@@ -360,6 +383,26 @@ export function registerMfbHandlers(): void {
     catalogueCache = null
     catalogueCacheTime = 0
     catalogueCacheAuthed = false
+  })
+
+  // Curated Session Mode presets served from MFB. Reads are open to any signed-in
+  // Limina user; writes are admin-only (enforced server-side, user 1).
+  ipcMain.handle('presets:list', async () => {
+    const token = await loadToken()
+    try {
+      return await withRetry429(() => fetchJson<unknown[]>(`${BASE}/session-presets`, token))
+    } catch (e) {
+      console.error('[presets:list] error:', e instanceof Error ? e.message : e)
+      return []
+    }
+  })
+  ipcMain.handle('presets:save', async (_, preset: { name: string; payload: unknown; sort_order?: number }) => {
+    const token = await loadToken()
+    return withRetry429(() => postJson(`${BASE}/session-presets`, preset, token))
+  })
+  ipcMain.handle('presets:delete', async (_, id: number) => {
+    const token = await loadToken()
+    return withRetry429(() => deleteJson(`${BASE}/session-presets/${id}`, token))
   })
 
   // Lightweight change-map for the renderer's incremental MFB resync:
