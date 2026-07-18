@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.5.0 — Limina Library is now Limina Studio
+
+Limina Library has become **Limina Studio** — one app that keeps everything you use here (your library, catalogue matching, and playlists) and adds live, tag-driven Session playback and multitrack Mix editing.
+
+- **Download Limina Studio** at [getliminastudio.com](https://www.getliminastudio.com/download) — this is the last standalone Limina Library release.
+- **Your library carries over automatically.** The first time you open Limina Studio it imports your Limina Library catalogue — folders, matches, tags, and playlists — with nothing to re-scan.
+- Limina Library keeps working, but new features now ship in Limina Studio.
+
 ## v2.4.0 — Session presets & smoother mixing
 
 Curated Session Mode starting points you can load in one click, plus a batch of Session Mode refinements.

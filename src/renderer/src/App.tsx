@@ -12,6 +12,7 @@ import { PlaylistPanel } from './components/PlaylistPanel'
 import { PlaylistTrackSearch } from './components/PlaylistTrackSearch'
 import { MixPanel } from './components/MixPanel'
 import { GuidedTour } from './components/GuidedTour'
+import { MovedBanner, MovedModal, movedModalPending } from './components/MovedToStudio'
 import { PlayerBar } from './components/PlayerBar'
 import { MixMiniPlayer } from './components/MixMiniPlayer'
 import { SettingsPanel } from './components/SettingsPanel'
@@ -305,6 +306,12 @@ export default function App(): JSX.Element {
   // On a brand-new install (tour not yet completed) silently record the version
   // instead of showing the modal — it's not an update, it's a first launch.
   useEffect(() => {
+    // Final "graduation" release: the moved-to-Studio modal replaces What's New.
+    // Record the version so What's New doesn't fire once the modal is dismissed.
+    if (movedModalPending()) {
+      try { localStorage.setItem('limina-library-last-seen-version', __APP_VERSION__) } catch { /* noop */ }
+      return
+    }
     if (import.meta.env.DEV) { setWhatsNewOpen(true); return }
     try {
       const key = 'limina-library-last-seen-version'
@@ -454,6 +461,10 @@ export default function App(): JSX.Element {
         className="h-7 shrink-0 bg-surface-panel"
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       />
+
+      {/* Limina Library → Limina Studio move notice */}
+      <MovedBanner />
+      <MovedModal />
 
       {/* Login success flash */}
       {loginFlash && userAccount && (
