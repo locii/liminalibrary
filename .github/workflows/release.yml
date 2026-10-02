@@ -89,24 +89,3 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit ${{ github.ref_name }} --draft=false --repo ${{ github.repository }}
-
-  revalidate-changelog:
-    needs: publish-release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Revalidate changelog on getliminastudio
-        env:
-          REVALIDATE_TOKEN: ${{ secrets.REVALIDATE_TOKEN }}
-        run: |
-          if [ -z "$REVALIDATE_TOKEN" ]; then
-            echo "REVALIDATE_TOKEN secret is not set — skipping revalidation"
-            exit 0
-          fi
-          code=$(curl -s -o /tmp/revalidate.out -w "%{http_code}" \
-            -X POST https://www.getliminastudio.com/api/revalidate \
-            -H "x-revalidate-token: $REVALIDATE_TOKEN")
-          echo "HTTP $code"
-          cat /tmp/revalidate.out || true
-          if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
-            exit 1
-          fi
